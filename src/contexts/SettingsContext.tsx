@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { useAuth } from './AuthContext';
+import { fetchSettings, updateSettings as saveSettings } from '../lib/database';
 
 export interface AppSettings {
   themeColor: string;
@@ -95,26 +93,37 @@ export const generatePalette = (hex: string): Record<number, string> => {
 };
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Only fetch settings if the user is logged in (admin view) OR if we can load it anonymously (e.g. for customer ordering)
-    // Actually, settings should be global, so let's load it regardless of `user`
-    const unsubscribe = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
-      if (docSnap.exists()) {
-        setSettings({ ...defaultSettings, ...docSnap.data() as AppSettings });
-      } else {
-        setSettings(defaultSettings);
+    const loadSettings = async () => {
+      try {
+        const data = await fetchSettings();
+        if (data) {
+          setSettings({
+            themeColor: data.theme_color,
+            customThemeHex: data.custom_theme_hex,
+            logoUrl: data.logo_url,
+            businessName: data.business_name,
+            cnpj: data.cnpj,
+            address: data.address,
+            phone: data.phone,
+          });
+        } else {
+          setSettings(defaultSettings);
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    }, (error) => {
-      console.error("Error loading settings:", error);
-      setLoading(false);
-    });
+    };
 
-    return () => unsubscribe();
+    loadSettings();
+
+    const interval = setInterval(loadSettings, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   // Update CSS variables based on theme
@@ -135,7 +144,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   const updateSettings = async (newSettings: Partial<AppSettings>) => {
     const merged = { ...settings, ...newSettings };
-    await setDoc(doc(db, 'settings', 'general'), merged);
+    await saveSettings({
+      theme_color: merged.themeColor,
+      custom_theme_hex: merged.customThemeHex,
+      logo_url: merged.logoUrl,
+      business_name: merged.businessName,
+      cnpj: merged.cnpj,
+      address: merged.address,
+      phone: merged.phone,
+    });
+    setSettings(merged);
   };
 
   return (

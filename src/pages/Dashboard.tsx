@@ -16,7 +16,7 @@ export default function Dashboard() {
     <main className="max-w-7xl mx-auto p-6">
       {/* Welcome Section */}
       <section className="mb-8">
-        <h2 className="text-2xl font-bold mb-1">Bem-vindo, {user?.displayName?.split(' ')[0] || 'Usuário'}</h2>
+        <h2 className="text-2xl font-bold mb-1">Bem-vindo, {user?.email?.split('@')[0] || 'Usuário'}</h2>
         <p className="text-slate-500 dark:text-slate-400">O sistema está operando normalmente. Veja o resumo dos módulos abaixo.</p>
       </section>
 
@@ -50,7 +50,7 @@ export default function Dashboard() {
         </h4>
         <p className="text-emerald-800 dark:text-emerald-300 text-sm leading-relaxed">
           A documentação técnica foi gerada com sucesso em <code className="bg-emerald-100 dark:bg-emerald-800/50 px-1 rounded">ARCHITECTURE.md</code>. 
-          O sistema está pronto para a implementação do backend e integração com Firebase conforme planejado.
+          O sistema está pronto para operação com backend Supabase.
         </p>
       </div>
     </main>

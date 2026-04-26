@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Utensils, ShoppingCart, Plus, Minus, Trash2, CheckCircle2, ChevronLeft, AlertCircle, Receipt, X, Clock, ChevronDown, QrCode, Search, Edit2, Save, XCircle, PlusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, addDoc, query, where, serverTimestamp, getDocs, updateDoc, doc, getDoc, orderBy, deleteDoc } from 'firebase/firestore';
+import { addMenuItem, addOrder, addSession, deleteMenuItem, fetchMenuItems, fetchOrders, updateMenuItem, updateOrder, updateTable } from '../lib/database';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -13,12 +13,12 @@ interface MenuItem {
   description?: string;
   price: number;
   category: string;
-  imageUrl?: string;
+  image_url?: string;
   available: boolean;
 }
 
 interface CartItem {
-  menuItemId: string;
+  menu_item_id: string;
   name: string;
   price: number;
   quantity: number;
@@ -27,11 +27,11 @@ interface CartItem {
 
 interface OrderData {
   id: string;
-  tableId: string;
+  table_id: string;
   items: CartItem[];
   status: string;
-  totalAmount: number;
-  createdAt: any;
+  total_amount: number;
+  created_at?: string;
 }
 
 export default function Order() {
@@ -86,9 +86,6 @@ export default function Order() {
   }, [searchQuery]);
 
   useEffect(() => {
-    let unsubscribeTable: () => void;
-    let checkInterval: NodeJS.Timeout;
-
     const activateTable = async () => {
       if (!tableId) {
         setError("ID da mesa não fornecido na URL.");
@@ -97,56 +94,21 @@ export default function Order() {
       }
 
       const sessionKey = `table_${tableId}_activated`;
-      const tableRef = doc(db, 'tables', tableId);
-
-      // Verificação periódica além do onSnapshot (como backup/sincronização)
-      checkInterval = setInterval(async () => {
-        try {
-          const snap = await getDoc(tableRef);
-          if (snap.exists()) {
-            const currentData = snap.data();
-            if (currentData.status === 'available' && sessionStorage.getItem(sessionKey)) {
-              setIsSessionClosedModalOpen(true);
-            } else if (currentData.status === 'reserved' && sessionStorage.getItem(sessionKey)) {
-              setIsTableReservedModalOpen(true);
-            }
-          } else {
-            setError(`A mesa (ID: ${tableId}) foi removida do sistema.`);
-          }
-        } catch (err) {
-          console.error("Erro na verificação periódica da mesa:", err);
-        }
-      }, 30000); // 30 seconds
-
-      // Set up real-time listener to check if table is released
-      unsubscribeTable = onSnapshot(tableRef, (docSnap) => {
-        if (docSnap.exists()) {
-          const currentData = docSnap.data();
-          setTableNumber(currentData.number);
-          
-          // If the table was freed by the restaurant but this client has an active session
-          if (currentData.status === 'available' && sessionStorage.getItem(sessionKey)) {
-            setIsSessionClosedModalOpen(true);
-          } else if (currentData.status === 'reserved' && sessionStorage.getItem(sessionKey)) {
-            setIsTableReservedModalOpen(true);
-          }
-        } else {
-          setError(`A mesa (ID: ${tableId}) foi removida do sistema.`);
-        }
-      }, (err) => {
-        console.error("Erro ao escutar mudanças na mesa:", err);
-      });
 
       try {
-        const tableSnap = await getDoc(tableRef);
+        const { data: tableData, error: tableError } = await supabase
+          .from('tables')
+          .select('*')
+          .eq('id', tableId)
+          .single();
 
-        if (!tableSnap.exists()) {
+        if (tableError || !tableData) {
           setError(`Mesa não encontrada no sistema (ID: ${tableId}). Verifique o QR Code.`);
           setLoading(false);
           return;
         }
 
-        const tableData = tableSnap.data();
+        setTableNumber(tableData.number);
 
         if (tableData.status === 'reserved') {
           setError(`Mesa não disponível. Esta mesa encontra-se reservada.`);
@@ -160,22 +122,14 @@ export default function Order() {
 
         if (tableData.status === 'available') {
           try {
-            // Create a new session (comanda)
-            const sessionRef = await addDoc(collection(db, 'sessions'), {
-              tableId: tableId,
-              status: 'active',
-              openedAt: serverTimestamp()
-            });
-
-            // Update the table to occupied
-            await updateDoc(tableRef, {
+            const session = await addSession(tableId);
+            await updateTable(tableId, {
               status: 'occupied',
               active: true,
-              openedAt: serverTimestamp(),
-              currentSessionId: sessionRef.id
+              opened_at: new Date().toISOString(),
+              current_session_id: session.id
             });
             
-            // Mark as activated in this browser session
             sessionStorage.setItem(sessionKey, 'true');
           } catch (err: any) {
             console.error("Erro ao ativar mesa:", err);
@@ -199,8 +153,33 @@ export default function Order() {
 
     activateTable();
 
+    let checkInterval: ReturnType<typeof setInterval> | undefined;
+    if (tableId) {
+      const sessionKey = `table_${tableId}_activated`;
+      checkInterval = setInterval(async () => {
+        try {
+          const { data: currentData } = await supabase
+            .from('tables')
+            .select('*')
+            .eq('id', tableId)
+            .single();
+          if (currentData) {
+            setTableNumber(currentData.number);
+            if (currentData.status === 'available' && sessionStorage.getItem(sessionKey)) {
+              setIsSessionClosedModalOpen(true);
+            } else if (currentData.status === 'reserved' && sessionStorage.getItem(sessionKey)) {
+              setIsTableReservedModalOpen(true);
+            }
+          } else {
+            setError(`A mesa (ID: ${tableId}) foi removida do sistema.`);
+          }
+        } catch (err) {
+          console.error("Erro na verificação periódica da mesa:", err);
+        }
+      }, 3000);
+    }
+
     return () => {
-      if (unsubscribeTable) unsubscribeTable();
       if (checkInterval) clearInterval(checkInterval);
     };
   }, [tableId]);
@@ -208,46 +187,46 @@ export default function Order() {
   useEffect(() => {
     if (error) return; // Don't load menu if there's a fatal error
 
-    const q = query(collection(db, 'menuItems'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const items: MenuItem[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data() as Omit<MenuItem, 'id'>;
-        items.push({ id: docSnap.id, ...data } as MenuItem);
-      });
-      setMenuItems(items);
-      setLoading(false);
-    }, (err: any) => {
-      console.error("Erro ao carregar cardápio:", err);
-      setError(`Erro ao carregar cardápio: ${err.message}`);
-      setLoading(false);
-    });
+    const loadMenu = async () => {
+      try {
+        const items = await fetchMenuItems();
+        setMenuItems(items as MenuItem[]);
+        setLoading(false);
+      } catch (err: any) {
+        console.error("Erro ao carregar cardápio:", err);
+        setError(`Erro ao carregar cardápio: ${err.message}`);
+        setLoading(false);
+      }
+    };
 
-    return () => unsubscribe();
+    loadMenu();
+    const interval = setInterval(loadMenu, 3000);
+
+    return () => clearInterval(interval);
   }, [error]);
 
   useEffect(() => {
     if (!tableId) return;
 
-    const q = query(collection(db, 'orders'), where('tableId', '==', tableId));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const orders: OrderData[] = [];
-      snapshot.forEach((doc) => {
-        orders.push({ id: doc.id, ...doc.data() } as OrderData);
-      });
-      // Ordenar localmente do mais recente para o mais antigo
+    const loadOrders = async () => {
+      try {
+        const allOrders = await fetchOrders();
+        const orders = (allOrders as OrderData[]).filter(order => order.table_id === tableId);
       orders.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
         return timeB - timeA;
       });
       setOrderHistory(orders);
-    }, (err: any) => {
-      console.error("Erro ao carregar histórico:", err);
-    });
+      } catch (err: any) {
+        console.error("Erro ao carregar histórico:", err);
+      }
+    };
 
-    return () => unsubscribe();
+    loadOrders();
+    const interval = setInterval(loadOrders, 3000);
+
+    return () => clearInterval(interval);
   }, [tableId]);
 
   useEffect(() => {
@@ -261,14 +240,14 @@ export default function Order() {
 
   const addToCart = (item: MenuItem) => {
     setCart(prev => {
-      const existing = prev.find(i => i.menuItemId === item.id);
+      const existing = prev.find(i => i.menu_item_id === item.id);
       let newQuantity = 1;
       let newCart;
       if (existing) {
         newQuantity = existing.quantity + 1;
-        newCart = prev.map(i => i.menuItemId === item.id ? { ...i, quantity: newQuantity } : i);
+        newCart = prev.map(i => i.menu_item_id === item.id ? { ...i, quantity: newQuantity } : i);
       } else {
-        newCart = [...prev, { menuItemId: item.id, name: item.name, price: item.price, quantity: 1 }];
+        newCart = [...prev, { menu_item_id: item.id, name: item.name, price: item.price, quantity: 1 }];
       }
       
       setToastNotification({
@@ -280,9 +259,9 @@ export default function Order() {
     });
   };
 
-  const updateQuantity = (menuItemId: string, delta: number) => {
+  const updateQuantity = (menu_item_id: string, delta: number) => {
     setCart(prev => prev.map(item => {
-      if (item.menuItemId === menuItemId) {
+      if (item.menu_item_id === menu_item_id) {
         const newQuantity = item.quantity + delta;
         return newQuantity > 0 ? { ...item, quantity: newQuantity } : item;
       }
@@ -290,39 +269,32 @@ export default function Order() {
     }));
   };
 
-  const updateNotes = (menuItemId: string, notes: string) => {
+  const updateNotes = (menu_item_id: string, notes: string) => {
     setCart(prev => prev.map(item => {
-      if (item.menuItemId === menuItemId) {
+      if (item.menu_item_id === menu_item_id) {
         return { ...item, notes };
       }
       return item;
     }));
   };
 
-  const removeFromCart = (menuItemId: string) => {
-    setCart(prev => prev.filter(item => item.menuItemId !== menuItemId));
+  const removeFromCart = (menu_item_id: string) => {
+    setCart(prev => prev.filter(item => item.menu_item_id !== menu_item_id));
   };
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const unpaidOrders = orderHistory.filter(o => !['paid', 'cancelled', 'archived'].includes(o.status));
-  const unpaidOrdersTotal = unpaidOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+  const unpaidOrdersTotal = unpaidOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
   const totalAPagar = cartTotal + unpaidOrdersTotal;
 
   const toggleItemAvailability = async (itemId: string, currentAvailable: boolean) => {
     try {
-      const itemRef = doc(db, 'menuItems', itemId);
-      await updateDoc(itemRef, {
-        available: !currentAvailable
-      });
+      await updateMenuItem(itemId, { available: !currentAvailable });
     } catch (err: any) {
       console.error("Erro ao atualizar disponibilidade:", err);
-      try {
-        handleFirestoreError(err, OperationType.UPDATE, 'menuItems');
-      } catch (e: any) {
-        setError(`Erro ao atualizar disponibilidade: ${e.message}`);
-      }
+      setError(`Erro ao atualizar disponibilidade: ${err.message}`);
     }
   };
 
@@ -333,29 +305,26 @@ export default function Order() {
     try {
       // 1. Submit cart as 'paid' if there are items
       if (cart.length > 0) {
-        await addDoc(collection(db, 'orders'), {
-          tableId: tableId || 'unknown',
+        await addOrder({
+          table_id: tableId || 'unknown',
           items: cart,
           status: 'paid',
-          totalAmount: cartTotal,
-          createdAt: serverTimestamp()
+          total_amount: cartTotal
         });
       }
 
       // 2. Mark past unpaid orders as 'paid'
       for (const order of unpaidOrders) {
-        await updateDoc(doc(db, 'orders', order.id), { status: 'paid' });
+        await updateOrder(order.id, { status: 'paid' });
       }
       
       // 3. Free the table
       if (tableId) {
-        // Prevent onSnapshot from showing the 'restaurant freed table' modal
         sessionStorage.removeItem(`table_${tableId}_activated`);
-        const tableRef = doc(db, 'tables', tableId);
-        await updateDoc(tableRef, {
+        await updateTable(tableId, {
           status: 'available',
           active: false,
-          currentSessionId: null
+          current_session_id: null
         });
       }
 
@@ -375,7 +344,7 @@ export default function Order() {
     if (!orderToCancel) return;
     setIsSubmitting(true);
     try {
-      await updateDoc(doc(db, 'orders', orderToCancel), { status: 'cancelled' });
+      await updateOrder(orderToCancel, { status: 'cancelled' });
       setOrderHistory(prev => prev.map(o => o.id === orderToCancel ? { ...o, status: 'cancelled' } : o));
       setOrderToCancel(null);
     } catch (err: any) {
@@ -391,7 +360,7 @@ export default function Order() {
 
     // Check for unavailable items before submitting
     const unavailable = cart.filter(cartItem => {
-      const menuItem = menuItems.find(item => item.id === cartItem.menuItemId);
+      const menuItem = menuItems.find(item => item.id === cartItem.menu_item_id);
       return !menuItem || menuItem.available === false;
     });
 
@@ -404,12 +373,11 @@ export default function Order() {
     setIsSubmitting(true);
     setError(null);
     try {
-      await addDoc(collection(db, 'orders'), {
-        tableId: tableId || 'unknown',
+      await addOrder({
+        table_id: tableId || 'unknown',
         items: cart,
         status: 'pending',
-        totalAmount: cartTotal,
-        createdAt: serverTimestamp()
+        total_amount: cartTotal
       });
       setCart([]);
       setIsCartOpen(false);
@@ -423,7 +391,7 @@ export default function Order() {
   };
 
   const removeUnavailableItems = () => {
-    setCart(prev => prev.filter(cartItem => !unavailableItems.some(ui => ui.menuItemId === cartItem.menuItemId)));
+    setCart(prev => prev.filter(cartItem => !unavailableItems.some(ui => ui.menu_item_id === cartItem.menu_item_id)));
     setIsUnavailableModalOpen(false);
     setUnavailableItems([]);
   };
@@ -460,9 +428,9 @@ export default function Order() {
       };
       
       if (editingItem.isNew) {
-        await addDoc(collection(db, 'menuItems'), dbData);
+        await addMenuItem(dbData);
       } else if (editingItem.id) {
-        await updateDoc(doc(db, 'menuItems', editingItem.id), dbData);
+        await updateMenuItem(editingItem.id, dbData);
       }
       setEditingItem(null);
     } catch (e: any) {
@@ -474,7 +442,7 @@ export default function Order() {
   const handleDeleteItem = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este item?')) return;
     try {
-      await deleteDoc(doc(db, 'menuItems', id));
+      await deleteMenuItem(id);
     } catch (e: any) {
       console.error("Erro ao deletar:", e);
       alert("Erro ao deletar: " + e.message);
@@ -848,7 +816,7 @@ export default function Order() {
               ) : (
                 <div className="space-y-6">
                   {cart.map(item => (
-                    <div key={item.menuItemId} className="flex flex-col gap-3">
+                    <div key={item.menu_item_id} className="flex flex-col gap-3">
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex-1">
                           <h4 className="font-bold text-slate-900 dark:text-white">{item.name}</h4>
@@ -856,14 +824,14 @@ export default function Order() {
                         </div>
                         <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 rounded-lg p-1 border border-slate-200 dark:border-slate-700">
                           <button 
-                            onClick={() => item.quantity > 1 ? updateQuantity(item.menuItemId, -1) : removeFromCart(item.menuItemId)}
+                            onClick={() => item.quantity > 1 ? updateQuantity(item.menu_item_id, -1) : removeFromCart(item.menu_item_id)}
                             className="w-8 h-8 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 rounded-md shadow-sm transition-colors"
                           >
                             {item.quantity > 1 ? <Minus className="w-4 h-4" /> : <Trash2 className="w-4 h-4 text-red-500" />}
                           </button>
                           <span className="w-4 text-center font-medium text-slate-900 dark:text-white">{item.quantity}</span>
                           <button 
-                            onClick={() => updateQuantity(item.menuItemId, 1)}
+                            onClick={() => updateQuantity(item.menu_item_id, 1)}
                             className="w-8 h-8 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 rounded-md shadow-sm transition-colors"
                           >
                             <Plus className="w-4 h-4" />
@@ -874,7 +842,7 @@ export default function Order() {
                         type="text" 
                         placeholder="Alguma observação? (ex: sem cebola)" 
                         value={item.notes || ''}
-                        onChange={(e) => updateNotes(item.menuItemId, e.target.value)}
+                        onChange={(e) => updateNotes(item.menu_item_id, e.target.value)}
                         className="w-full text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-shadow"
                       />
                     </div>
@@ -894,7 +862,7 @@ export default function Order() {
                              Pendente
                            </span>
                            <span className="text-sm font-bold text-slate-900 dark:text-white">
-                             R$ {order.totalAmount.toFixed(2).replace('.', ',')}
+                            R$ {order.total_amount.toFixed(2).replace('.', ',')}
                            </span>
                          </div>
                          <ul className="text-sm text-slate-600 dark:text-slate-400 mb-3 space-y-1">
@@ -995,7 +963,7 @@ export default function Order() {
                           </span>
                           <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                            {order.created_at ? new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                           </span>
                         </div>
                         
@@ -1038,7 +1006,7 @@ export default function Order() {
                         
                         <div className="border-t border-slate-200 dark:border-slate-700 pt-3 flex justify-between items-center font-medium shadow-sm mb-3">
                           <span className="text-slate-900 dark:text-white">Total</span>
-                          <span className="text-emerald-600 dark:text-emerald-400">R$ {order.totalAmount.toFixed(2).replace('.', ',')}</span>
+                          <span className="text-emerald-600 dark:text-emerald-400">R$ {order.total_amount.toFixed(2).replace('.', ',')}</span>
                         </div>
                         {order.status === 'pending' && (
                           <div className="pt-2 border-t border-slate-100 dark:border-slate-700/50">
@@ -1212,7 +1180,7 @@ export default function Order() {
             </p>
             <ul className="mb-6 space-y-2 max-h-40 overflow-y-auto">
               {unavailableItems.map(item => (
-                <li key={item.menuItemId} className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                <li key={item.menu_item_id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
                   <span className="font-medium text-slate-900 dark:text-slate-100">{item.name}</span>
                   <span className="text-sm font-semibold text-slate-500">x{item.quantity}</span>
                 </li>

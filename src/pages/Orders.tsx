@@ -1,25 +1,26 @@
 import { useState, useEffect, useRef } from 'react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, query, updateDoc, doc, getDoc, deleteDoc, where } from 'firebase/firestore';
+import { fetchTables, fetchOrders, updateOrder } from '../lib/database';
 import { Clock, Receipt, CheckCircle2, Utensils, MoveRight, MoveLeft, AlertCircle, XCircle, AlertTriangle, Search, Printer, ChevronDown, ChevronUp, LayoutDashboard, AlignJustify, Archive, ClipboardList, Maximize } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CartItem {
-  menuItemId: string;
+  menu_item_id: string;
   name: string;
   price: number;
   quantity: number;
   notes?: string;
 }
 
+type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'served' | 'paid' | 'archived' | 'cancelled';
+
 interface OrderData {
   id: string;
-  tableId: string;
+  table_id: string;
   tableNumber?: string | number;
   items: CartItem[];
-  status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'served' | 'paid' | 'archived' | 'cancelled';
-  totalAmount: number;
-  createdAt: any;
+  status: OrderStatus;
+  total_amount: number;
+  created_at?: string;
 }
 
 export default function Orders() {
@@ -99,48 +100,63 @@ export default function Orders() {
   };
 
   useEffect(() => {
-    const qTables = query(collection(db, 'tables'));
-    const unsubscribeTables = onSnapshot(qTables, (snapshot) => {
-      const newMap = new Map<string, string | number>();
-      snapshot.forEach(doc => {
-        newMap.set(doc.id, doc.data().number);
-      });
-      setTablesMap(newMap);
-    }, (error) => {
-      console.error("Erro ao buscar mesas:", error);
-    });
+    let isMounted = true;
 
-    return () => unsubscribeTables();
+    const loadTables = async () => {
+      try {
+        const tables = await fetchTables();
+        const newMap = new Map<string, string | number>();
+        tables.forEach((table) => {
+          newMap.set(table.id, table.number);
+        });
+        if (isMounted) {
+          setTablesMap(newMap);
+        }
+      } catch (error) {
+        console.error("Erro ao buscar mesas:", error);
+      }
+    };
+
+    loadTables();
+    const interval = setInterval(loadTables, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
-    // Apenas pedidos que não foram arquivados para economizar leitura
-    const q = query(
-      collection(db, 'orders'), 
-      where('status', 'in', ['pending', 'preparing', 'ready'])
-    );
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ordersData: OrderData[] = [];
-      
-      for (const document of snapshot.docs) {
-        ordersData.push({ id: document.id, ...document.data() } as OrderData);
+    let isMounted = true;
+
+    const loadOrders = async () => {
+      try {
+        const ordersData = await fetchOrders({ status: ['pending', 'preparing', 'ready'] }) as OrderData[];
+        ordersData.sort((a, b) => {
+          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return timeA - timeB;
+        });
+
+        if (isMounted) {
+          setRawOrders(ordersData);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Erro ao buscar pedidos:", error);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-      
-      ordersData.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-        return timeA - timeB; // Oldest first
-      });
+    };
 
-      setRawOrders(ordersData);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'orders');
-      setLoading(false);
-    });
+    loadOrders();
+    const interval = setInterval(loadOrders, 3000);
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -151,7 +167,7 @@ export default function Orders() {
 
     const compiledOrders = rawOrders.map(order => ({
       ...order,
-      tableNumber: tablesMap.get(order.tableId) || 'N/A'
+      tableNumber: tablesMap.get(order.table_id) || 'N/A'
     }));
 
     // Check if we have new pending orders
@@ -166,11 +182,11 @@ export default function Orders() {
     setOrders(compiledOrders);
   }, [rawOrders, tablesMap]);
 
-  const updateOrderStatus = async (orderId: string, newStatus: OrderData['status']) => {
+  const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
-      await updateDoc(doc(db, 'orders', orderId), { status: newStatus });
+      await updateOrder(orderId, { status: newStatus });
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
+      console.error(`Erro ao atualizar pedido ${orderId}:`, error);
     }
   };
 
@@ -181,10 +197,10 @@ export default function Orders() {
   const confirmCancelOrder = async () => {
     if (!orderToCancel) return;
     try {
-      await updateDoc(doc(db, 'orders', orderToCancel), { status: 'cancelled' });
+      await updateOrder(orderToCancel, { status: 'cancelled' });
       setOrderToCancel(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `orders/${orderToCancel}`);
+      console.error(`Erro ao cancelar pedido ${orderToCancel}:`, error);
       setOrderToCancel(null); // Close modal on error, or you could let them try again
     }
   };
@@ -198,7 +214,7 @@ export default function Orders() {
       onConfirm: async () => {
         try {
           await Promise.all(preparingOrders.map(order => 
-            updateDoc(doc(db, 'orders', order.id), { status: 'ready' })
+            updateOrder(order.id, { status: 'ready' })
           ));
         } catch (error) {
           console.error("Erro ao avançar todos os pedidos:", error);
@@ -209,9 +225,11 @@ export default function Orders() {
     });
   };
 
-  const getElapsedTime = (createdAt: any) => {
-    if (!createdAt || !createdAt.toMillis) return { minutes: 0, formatted: '' };
-    const diffMs = now.getTime() - createdAt.toMillis();
+  const getElapsedTime = (createdAt?: string) => {
+    if (!createdAt) return { minutes: 0, formatted: '' };
+    const createdAtMs = new Date(createdAt).getTime();
+    if (Number.isNaN(createdAtMs)) return { minutes: 0, formatted: '' };
+    const diffMs = now.getTime() - createdAtMs;
     const diffMins = Math.floor(diffMs / 60000);
     if (diffMins < 60) return { minutes: diffMins, formatted: `${diffMins}m` };
     const hours = Math.floor(diffMins / 60);
@@ -235,8 +253,13 @@ export default function Orders() {
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     if (!printWindow) return;
 
-    const timeString = order.createdAt?.toDate ? order.createdAt.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
-    const dateString = order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString() : '';
+    const createdDate = order.created_at ? new Date(order.created_at) : null;
+    const timeString = createdDate && !Number.isNaN(createdDate.getTime())
+      ? createdDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+      : '';
+    const dateString = createdDate && !Number.isNaN(createdDate.getTime())
+      ? createdDate.toLocaleDateString()
+      : '';
 
     printWindow.document.write(`
       <html>
@@ -263,7 +286,7 @@ export default function Orders() {
             </div>
           `).join('')}
           <hr/>
-          <div class="total">Total: R$ ${order.totalAmount.toFixed(2).replace('.',',')}</div>
+          <div class="total">Total: R$ ${order.total_amount.toFixed(2).replace('.',',')}</div>
           <script>
             window.onload = function() { window.print(); window.close(); }
           </script>
@@ -289,7 +312,7 @@ export default function Orders() {
     const itemCounts = new Map<string, { quantity: number; notes: Set<string>; isDelayed: boolean; isVeryDelayed: boolean }>();
     
     activeOrders.forEach(order => {
-      const timeInfo = getElapsedTime(order.createdAt);
+      const timeInfo = getElapsedTime(order.created_at);
       const isVeryDelayed = timeInfo.minutes > 30;
       const isDelayed = timeInfo.minutes > 15;
 
@@ -327,7 +350,7 @@ export default function Orders() {
     const col = columns.find(c => c.id === order.status);
     if (!col) return null;
 
-    const timeInfo = getElapsedTime(order.createdAt);
+    const timeInfo = getElapsedTime(order.created_at);
     const isDelayed = (col.id === 'pending' || col.id === 'preparing') && timeInfo.minutes > 15;
     const isVeryDelayed = (col.id === 'pending' || col.id === 'preparing') && timeInfo.minutes > 30;
     
@@ -453,10 +476,10 @@ export default function Orders() {
     const activeOrders = filteredOrders.filter(o => ['pending', 'preparing', 'ready'].includes(o.status));
     const grouped = new Map<string, { tableNumber: string | number, orders: OrderData[] }>();
     activeOrders.forEach(o => {
-        if (!grouped.has(o.tableId)) {
-            grouped.set(o.tableId, { tableNumber: o.tableNumber || '?', orders: [] });
+        if (!grouped.has(o.table_id)) {
+            grouped.set(o.table_id, { tableNumber: o.tableNumber || '?', orders: [] });
         }
-        grouped.get(o.tableId)!.orders.push(o);
+        grouped.get(o.table_id)!.orders.push(o);
     });
     return Array.from(grouped.values()).sort((a, b) => {
       const numA = parseInt(String(a.tableNumber));

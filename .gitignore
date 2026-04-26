@@ -6,4 +6,3 @@ dist
 *.local
 .DS_Store
 *.log
-firebase-applet-config.json

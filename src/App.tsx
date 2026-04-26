@@ -1,6 +1,6 @@
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Utensils, LogOut, LogIn, Sun, Moon, Settings as SettingsIcon, LayoutDashboard, LayoutGrid, Receipt, Store, Wallet, BarChart3 } from 'lucide-react';
+import { LogOut, Sun, Moon, Settings as SettingsIcon, LayoutDashboard, LayoutGrid, Receipt, Store, Wallet, BarChart3 } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { useTheme } from './contexts/ThemeContext';
 import { useSettings } from './contexts/SettingsContext';
@@ -85,16 +85,12 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
           
           <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-bold leading-none">{user?.displayName}</p>
+              <p className="text-sm font-bold leading-none">{user?.email?.split('@')[0] || 'Usuário'}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{user?.email}</p>
             </div>
-            {user?.photoURL ? (
-              <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700" referrerPolicy="no-referrer" />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold">
-                {user?.displayName?.charAt(0) || 'U'}
-              </div>
-            )}
+            <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold">
+              {(user?.email?.charAt(0) || 'U').toUpperCase()}
+            </div>
             <button 
               onClick={logout}
               className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors ml-2"
@@ -133,40 +129,6 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
       <footer className="mt-12 border-t border-slate-200 dark:border-slate-700 py-8 px-6 text-center text-slate-400 dark:text-slate-500 text-sm transition-colors">
         <p>&copy; 2026 {settings.businessName}</p>
       </footer>
-    </div>
-  );
-}
-
-function LoginScreen({ login }: { login: () => void }) {
-  const { settings } = useSettings();
-  
-  return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 text-center">
-        {settings.logoUrl ? (
-          <img 
-            src={settings.logoUrl} 
-            alt="Logo" 
-            className="h-20 mx-auto object-contain mb-6 rounded-md"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }} 
-          />
-        ) : (
-          <div className="mx-auto bg-emerald-100 dark:bg-emerald-900/30 w-16 h-16 rounded-full flex items-center justify-center mb-6">
-            <Store className="text-emerald-600 dark:text-primary-400 w-8 h-8" />
-          </div>
-        )}
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{settings.businessName}</h1>
-        <p className="text-slate-500 dark:text-slate-400 mb-8">Faça login para acessar o sistema de gestão.</p>
-        <button
-          onClick={login}
-          className="w-full bg-emerald-600 hover:bg-primary-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white font-medium py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors"
-        >
-          <LogIn className="w-5 h-5" />
-          Entrar com Google
-        </button>
-      </div>
     </div>
   );
 }

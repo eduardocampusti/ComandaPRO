@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, query, updateDoc, doc, where, orderBy, getDocs, writeBatch } from 'firebase/firestore';
+import { fetchTables, fetchOrders, updateOrder, updateTable } from '../lib/database';
 import { Wallet, Store, Receipt, CheckCircle2, Search, Utensils, RotateCcw, AlertTriangle } from 'lucide-react';
 
-interface Table {
+interface TableData {
   id: string;
   number: number | string;
   status: 'available' | 'occupied' | 'reserved';
+  capacity: number;
   active?: boolean;
+  opened_at?: string;
+  current_session_id?: string | null;
 }
 
 interface CartItem {
-  menuItemId: string;
+  menu_item_id: string;
   name: string;
   price: number;
   quantity: number;
@@ -20,77 +22,82 @@ interface CartItem {
 
 interface OrderData {
   id: string;
-  tableId: string;
+  table_id: string;
   items: CartItem[];
   status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'served' | 'paid' | 'archived' | 'cancelled';
-  totalAmount: number;
-  createdAt?: any;
+  total_amount: number;
+  created_at?: string;
 }
 
 export default function Cashier() {
-  const [tables, setTables] = useState<Table[]>([]);
+  const [tables, setTables] = useState<TableData[]>([]);
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
   const [viewMode, setViewMode] = useState<'open' | 'closed'>('open');
   const [closedOrders, setClosedOrders] = useState<OrderData[]>([]);
-  const [selectedTableDetails, setSelectedTableDetails] = useState<Table | null>(null);
+  const [selectedTableDetails, setSelectedTableDetails] = useState<TableData | null>(null);
 
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [confirmModalData, setConfirmModalData] = useState<{table: Table, hasPending: boolean} | null>(null);
+  const [confirmModalData, setConfirmModalData] = useState<{table: TableData, hasPending: boolean} | null>(null);
 
   useEffect(() => {
+    const loadTables = async () => {
+      try {
+        const data = await fetchTables();
+        setTables(data);
+      } catch (error) {
+        console.error('Erro ao buscar mesas:', error);
+      }
+    };
 
-    const qTables = query(collection(db, 'tables'), orderBy('number'));
-    const unsubscribeTables = onSnapshot(qTables, (snapshot) => {
-      const tablesData: Table[] = [];
-      snapshot.forEach(doc => tablesData.push({ id: doc.id, ...doc.data() } as Table));
-      setTables(tablesData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'tables');
-    });
+    const loadOrders = async () => {
+      try {
+        const data = await fetchOrders({
+          status: ['pending', 'preparing', 'ready', 'delivered', 'served']
+        });
+        setOrders(data);
+        setLoading(false);
+      } catch (error) {
+        console.error('Erro ao buscar pedidos:', error);
+        setLoading(false);
+      }
+    };
 
-    const qOrders = query(
-      collection(db, 'orders'),
-      where('status', 'in', ['pending', 'preparing', 'ready', 'delivered', 'served'])
-    );
-    const unsubscribeOrders = onSnapshot(qOrders, (snapshot) => {
-      const ordersData: OrderData[] = [];
-      snapshot.forEach(doc => ordersData.push({ id: doc.id, ...doc.data() } as OrderData));
-      setOrders(ordersData);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'orders');
-      setLoading(false);
-    });
+    const loadClosedOrders = async () => {
+      try {
+        const data = await fetchOrders({ status: ['paid'] });
+        setClosedOrders(data);
+      } catch (error) {
+        console.error('Erro ao buscar pedidos pagos:', error);
+      }
+    };
 
-    const qClosedOrders = query(
-      collection(db, 'orders'),
-      where('status', '==', 'paid')
-    );
-    const unsubscribeClosedOrders = onSnapshot(qClosedOrders, (snapshot) => {
-      const ordersData: OrderData[] = [];
-      snapshot.forEach(doc => ordersData.push({ id: doc.id, ...doc.data() } as OrderData));
-      setClosedOrders(ordersData);
-    });
+    loadTables();
+    loadOrders();
+    loadClosedOrders();
+
+    const tablesInterval = setInterval(loadTables, 3000);
+    const ordersInterval = setInterval(loadOrders, 3000);
+    const closedOrdersInterval = setInterval(loadClosedOrders, 3000);
 
     return () => {
-      unsubscribeTables();
-      unsubscribeOrders();
-      unsubscribeClosedOrders();
+      clearInterval(tablesInterval);
+      clearInterval(ordersInterval);
+      clearInterval(closedOrdersInterval);
     };
   }, []);
 
   const getTableOrders = (tableId: string) => {
-    return orders.filter(o => o.tableId === tableId);
+    return orders.filter(o => o.table_id === tableId);
   };
 
   const getTableTotal = (tableOrders: OrderData[]) => {
-    return tableOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+    return tableOrders.reduce((sum, order) => sum + order.total_amount, 0);
   };
 
-  const handleCloseTableClick = (table: Table) => {
+  const handleCloseTableClick = (table: TableData) => {
     const tableOrders = getTableOrders(table.id);
     const unservedOrders = tableOrders.filter(o => o.status !== 'served');
     
@@ -105,28 +112,18 @@ export default function Cashier() {
     const tableOrders = getTableOrders(table.id);
 
     try {
-      const batch = writeBatch(db);
-      
-      // Update all orders to paid
-      tableOrders.forEach(order => {
-        batch.update(doc(db, 'orders', order.id), { status: 'paid' });
-      });
-
-      // Free the table
-      batch.update(doc(db, 'tables', table.id), { 
+      await Promise.all(tableOrders.map(o => updateOrder(o.id, { status: 'paid' })));
+      await updateTable(table.id, { 
         status: 'available', 
         active: false, 
-        currentSessionId: null
+        current_session_id: null
       });
 
-      await batch.commit();
       setIsConfirmModalOpen(false);
       setConfirmModalData(null);
       setSelectedTableDetails(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, 'cashier/closeTable');
-      // Just log the error, don't use alert()
-      console.error("Erro ao fechar a mesa:", error);
+      console.error('Erro ao fechar a mesa:', error);
     }
   };
 
@@ -137,10 +134,9 @@ export default function Cashier() {
     return String(t.number).toLowerCase().includes(searchTerm.toLowerCase());
   });
 
-  const totalClosedAmount = closedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
-  const totalOpenAmount = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+  const totalClosedAmount = closedOrders.reduce((sum, order) => sum + order.total_amount, 0);
+  const totalOpenAmount = orders.reduce((sum, order) => sum + order.total_amount, 0);
 
-  // Consider today based on createdAt timestamp if available, but for now we summarize the collections.
   const paidOrdersCount = closedOrders.length;
   const openTablesCount = occupiedTables.length;
 
@@ -334,10 +330,10 @@ export default function Cashier() {
                       <tr key={order.id} className={i !== closedOrders.length - 1 ? 'border-b border-slate-100 dark:border-slate-800' : ''}>
                         <td className="py-3 px-4 text-sm text-slate-900 dark:text-slate-300 font-medium">{order.id.slice(0, 8)}...</td>
                         <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-400">
-                          {tables.find(t => t.id === order.tableId)?.number || 'N/A'}
+                          {tables.find(t => t.id === order.table_id)?.number || 'N/A'}
                         </td>
                         <td className="py-3 px-4 text-sm font-bold text-slate-900 dark:text-white">
-                          R$ {order.totalAmount.toFixed(2).replace('.', ',')}
+                          R$ {order.total_amount.toFixed(2).replace('.', ',')}
                         </td>
                         <td className="py-3 px-4 text-sm">
                           <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-1 rounded-md font-bold text-xs">
@@ -416,7 +412,7 @@ export default function Cashier() {
                           </ul>
                           <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center font-bold">
                             <span className="text-slate-800 dark:text-slate-200">Subtotal</span>
-                            <span className="text-slate-900 dark:text-white">R$ {order.totalAmount.toFixed(2).replace('.', ',')}</span>
+                            <span className="text-slate-900 dark:text-white">R$ {order.total_amount.toFixed(2).replace('.', ',')}</span>
                           </div>
                         </div>
                       </div>

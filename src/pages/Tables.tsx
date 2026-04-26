@@ -2,20 +2,30 @@ import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { ArrowLeft, Plus, Trash2, Copy, Check, Calendar, Clock, X, RotateCcw, QrCode, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, query, orderBy, where, updateDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  fetchTables,
+  addTable as createTable,
+  updateTable,
+  deleteTable,
+  fetchReservations,
+  addReservation as createReservation,
+  updateReservation as updateReservationInDb
+} from '../lib/database';
 
-interface Table {
+interface TableData {
   id: string;
   number: number;
   status: 'available' | 'occupied' | 'reserved';
   capacity: number;
+  active?: boolean;
+  opened_at?: string;
+  current_session_id?: string | null;
 }
 
-interface Reservation {
+interface ReservationData {
   id: string;
-  tableId: string;
-  customerName: string;
+  table_id: string;
+  customer_name: string;
   date: string;
   time: string;
   guests: number;
@@ -23,18 +33,18 @@ interface Reservation {
 }
 
 export default function Tables() {
-  const [tables, setTables] = useState<Table[]>([]);
+  const [tables, setTables] = useState<TableData[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   const [reservationError, setReservationError] = useState<string | null>(null);
-  const [selectedTableForReservations, setSelectedTableForReservations] = useState<Table | null>(null);
-  const [qrCodeModalTable, setQrCodeModalTable] = useState<Table | null>(null);
-  const [reopenModalTable, setReopenModalTable] = useState<Table | null>(null);
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [newReservation, setNewReservation] = useState<Partial<Reservation>>({
-    customerName: '',
+  const [selectedTableForReservations, setSelectedTableForReservations] = useState<TableData | null>(null);
+  const [qrCodeModalTable, setQrCodeModalTable] = useState<TableData | null>(null);
+  const [reopenModalTable, setReopenModalTable] = useState<TableData | null>(null);
+  const [reservations, setReservations] = useState<ReservationData[]>([]);
+  const [newReservation, setNewReservation] = useState<Partial<ReservationData>>({
+    customer_name: '',
     date: new Date().toISOString().split('T')[0],
     time: '19:00',
     guests: 2
@@ -47,109 +57,104 @@ export default function Tables() {
     });
   };
 
-  useEffect(() => {
-    const q = query(collection(db, 'tables'), orderBy('number'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const tablesData: Table[] = [];
-      snapshot.forEach((doc) => {
-        tablesData.push({ id: doc.id, ...doc.data() } as Table);
-      });
-      setTables(tablesData);
+  const loadTables = async () => {
+    try {
+      const data = await fetchTables();
+      setTables(data);
       setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'tables');
-    });
+    } catch (error) {
+      console.error('Erro ao buscar mesas:', error);
+      setLoading(false);
+    }
+  };
 
-    return () => unsubscribe();
+  useEffect(() => {
+    loadTables();
+    const interval = setInterval(loadTables, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     if (!selectedTableForReservations) return;
-    const q = query(
-      collection(db, 'reservations'),
-      where('tableId', '==', selectedTableForReservations.id)
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const resData: Reservation[] = [];
-      snapshot.forEach((doc) => {
-        resData.push({ id: doc.id, ...doc.data() } as Reservation);
-      });
-      // Ensure time-based ordering client-side as we only query by tableId
-      resData.sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
-      setReservations(resData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'reservations');
-    });
-    return () => unsubscribe();
+
+    const loadReservations = async () => {
+      try {
+        const data = await fetchReservations(selectedTableForReservations.id);
+        data.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+        setReservations(data);
+      } catch (error) {
+        console.error('Erro ao buscar reservas:', error);
+      }
+    };
+
+    loadReservations();
+    const interval = setInterval(loadReservations, 3000);
+    return () => clearInterval(interval);
   }, [selectedTableForReservations]);
 
-  const updateTableStatus = async (tableId: string, status: Table['status']) => {
+  const updateTableStatus = async (tableId: string, status: TableData['status']) => {
     try {
       if (status === 'occupied') {
-        await updateDoc(doc(db, 'tables', tableId), { 
+        await updateTable(tableId, {
           status,
           active: true,
-          openedAt: serverTimestamp()
+          opened_at: new Date().toISOString()
         });
       } else if (status === 'available') {
-        await updateDoc(doc(db, 'tables', tableId), { 
+        await updateTable(tableId, {
           status,
           active: false,
-          currentSessionId: null,
-          openedAt: null
+          current_session_id: null,
+          opened_at: null
         });
       } else {
-        await updateDoc(doc(db, 'tables', tableId), { status });
+        await updateTable(tableId, { status });
       }
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `tables/${tableId}`);
+      console.error('Erro ao atualizar status da mesa:', error);
     }
   };
 
-  const reopenTable = (table: Table) => {
+  const reopenTable = (table: TableData) => {
     setReopenModalTable(table);
   };
 
   const confirmReopenTable = async () => {
     if (!reopenModalTable) return;
     try {
-      await updateDoc(doc(db, 'tables', reopenModalTable.id), { 
+      await updateTable(reopenModalTable.id, {
         status: 'available',
-        currentSessionId: null,
+        current_session_id: null,
         active: false,
-        openedAt: null
+        opened_at: null
       });
       setReopenModalTable(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `tables/${reopenModalTable.id}`);
+      console.error('Erro ao reabrir mesa:', error);
     }
   };
 
-  const addTable = async () => {
+  const handleAddTable = async () => {
     const nextNumber = tables.length > 0 ? Math.max(...tables.map(t => t.number)) + 1 : 1;
     try {
-      await addDoc(collection(db, 'tables'), {
-        number: nextNumber,
-        status: 'available',
-        capacity: 4
-      });
+      await createTable(nextNumber, 4);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'tables');
+      console.error('Erro ao adicionar mesa:', error);
     }
   };
 
   const removeTable = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'tables', id));
+      await deleteTable(id);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `tables/${id}`);
+      console.error('Erro ao remover mesa:', error);
     }
   };
 
-  const openReservations = (table: Table) => {
+  const openReservations = (table: TableData) => {
     setSelectedTableForReservations(table);
     setNewReservation({
-      customerName: '',
+      customer_name: '',
       date: new Date().toISOString().split('T')[0],
       time: '19:00',
       guests: 2
@@ -165,10 +170,10 @@ export default function Tables() {
     setReservationError(null);
   };
 
-  const addReservation = async (e: any) => {
+  const handleAddReservation = async (e: any) => {
     e.preventDefault();
-    if (!selectedTableForReservations || !newReservation.customerName || !newReservation.date || !newReservation.time) return;
-    
+    if (!selectedTableForReservations || !newReservation.customer_name || !newReservation.date || !newReservation.time) return;
+
     // Check for conflicts
     const newDateTime = new Date(`${newReservation.date}T${newReservation.time}`);
     const MIN_INTERVAL_HOURS = 2;
@@ -186,43 +191,42 @@ export default function Tables() {
       const isBefore = resDateTime.getTime() < newDateTime.getTime();
       const diffMs = Math.abs(resDateTime.getTime() - newDateTime.getTime());
       const diffMinutes = Math.floor(diffMs / (1000 * 60));
-      
+
       setReservationError(
         `🚨 Conflito de Horário!
-A mesa já possui reserva para "${conflictingRes.customerName}" às ${conflictingRes.time}.
+A mesa já possui reserva para "${conflictingRes.customer_name}" às ${conflictingRes.time}.
 Seu horário (${newReservation.time}) está apenas ${diffMinutes} minutos ${isBefore ? 'depois' : 'antes'} dessa reserva.
 Para garantir tempo de serviço e limpeza, o intervalo mínimo exigido é de 120 minutos (2 horas).`
       );
       return;
     }
-    
+
     setReservationError(null);
 
     try {
-      await addDoc(collection(db, 'reservations'), {
-        tableId: selectedTableForReservations.id,
-        customerName: newReservation.customerName,
+      await createReservation({
+        table_id: selectedTableForReservations.id,
+        customer_name: newReservation.customer_name,
         date: newReservation.date,
         time: newReservation.time,
         guests: Number(newReservation.guests) || 2,
-        status: 'scheduled',
-        createdAt: new Date().toISOString()
+        status: 'scheduled'
       });
       setNewReservation({
         ...newReservation,
-        customerName: '',
+        customer_name: '',
         time: '19:00'
       });
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'reservations');
+      console.error('Erro ao adicionar reserva:', error);
     }
   };
 
-  const updateReservationStatus = async (resId: string, status: Reservation['status']) => {
+  const updateReservationStatus = async (resId: string, status: ReservationData['status']) => {
     try {
-      await updateDoc(doc(db, 'reservations', resId), { status });
+      await updateReservationInDb(resId, { status });
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `reservations/${resId}`);
+      console.error('Erro ao atualizar status da reserva:', error);
     }
   };
 
@@ -293,7 +297,7 @@ Para garantir tempo de serviço e limpeza, o intervalo mínimo exigido é de 120
           </div>
         </div>
         <button
-          onClick={addTable}
+          onClick={handleAddTable}
           className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
         >
           <Plus className="w-5 h-5" />
@@ -308,7 +312,7 @@ Para garantir tempo de serviço e limpeza, o intervalo mínimo exigido é de 120
       ) : tables.length === 0 ? (
         <div className="text-center p-12 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
           <p className="text-slate-500 dark:text-slate-400 mb-4">Nenhuma mesa cadastrada.</p>
-          <button onClick={addTable} className="text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
+          <button onClick={handleAddTable} className="text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
             Adicionar primeira mesa
           </button>
         </div>
@@ -341,7 +345,7 @@ Para garantir tempo de serviço e limpeza, o intervalo mínimo exigido é de 120
                 }`}>Mesa {table.number}</h3>
                 <select
                   value={table.status || 'available'}
-                  onChange={(e) => updateTableStatus(table.id, e.target.value as Table['status'])}
+                  onChange={(e) => updateTableStatus(table.id, e.target.value as TableData['status'])}
                   className={`text-xs font-semibold px-2.5 py-1 rounded-md border-transparent focus:ring-0 cursor-pointer ${
                     table.status === 'reserved' 
                       ? 'bg-amber-200 text-amber-900 dark:bg-amber-500/20 dark:text-amber-300'
@@ -436,7 +440,7 @@ Para garantir tempo de serviço e limpeza, o intervalo mínimo exigido é de 120
             <div className="p-6 overflow-y-auto flex-1 flex flex-col md:flex-row gap-8">
               <div className="flex-1 min-w-[280px]">
                 <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Nova Reserva</h3>
-                <form onSubmit={addReservation} className="space-y-4">
+                <form onSubmit={handleAddReservation} className="space-y-4">
                   {reservationError && (
                     <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-xl p-4 text-red-800 dark:text-red-400 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-2">
                       <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
@@ -448,8 +452,8 @@ Para garantir tempo de serviço e limpeza, o intervalo mínimo exigido é de 120
                     <input 
                       type="text" 
                       required
-                      value={newReservation.customerName}
-                      onChange={e => setNewReservation({...newReservation, customerName: e.target.value})}
+                      value={newReservation.customer_name}
+                      onChange={e => setNewReservation({...newReservation, customer_name: e.target.value})}
                       className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       placeholder="Ex: João Silva"
                     />
@@ -520,7 +524,7 @@ Para garantir tempo de serviço e limpeza, o intervalo mínimo exigido é de 120
                           </span>
                         </div>
                         <p className="text-slate-700 dark:text-slate-300 font-medium">
-                          {res.customerName} <span className="text-slate-500 dark:text-slate-400 font-normal">({res.guests} pessoas)</span>
+                          {res.customer_name} <span className="text-slate-500 dark:text-slate-400 font-normal">({res.guests} pessoas)</span>
                         </p>
                         
                         <div className="mt-4 flex gap-2">
@@ -544,9 +548,9 @@ Para garantir tempo de serviço e limpeza, o intervalo mínimo exigido é de 120
                             <button 
                                 onClick={() => updateReservationStatus(res.id, 'scheduled')}
                                 className="flex-1 text-xs py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-800 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 rounded-lg font-medium transition-colors"
-                              >
-                                Reativar
-                              </button>
+                            >
+                              Reativar
+                            </button>
                           )}
                         </div>
                       </div>

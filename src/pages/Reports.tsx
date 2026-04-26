@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { fetchOrders } from '../lib/database';
 import { LayoutDashboard, TrendingUp, DollarSign, ShoppingBag, Users, Calendar, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, 
@@ -8,20 +7,20 @@ import {
 } from 'recharts';
 
 interface CartItem {
-  menuItemId: string;
+  menu_item_id: string;
   name: string;
   price: number;
   quantity: number;
+  notes?: string;
 }
 
 interface OrderData {
   id: string;
-  tableId: string;
-  tableNumber?: string | number;
+  table_id: string;
   items: CartItem[];
   status: string;
-  totalAmount: number;
-  createdAt: any;
+  total_amount: number;
+  created_at?: string;
 }
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#ef4444', '#06b6d4', '#14b8a6'];
@@ -31,48 +30,40 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'orders'));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ordersData: OrderData[] = [];
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        ordersData.push({
-          id: doc.id,
-          ...data
-        } as OrderData);
-      });
-      
-      // Sort in memory instead of requiring an index
-      ordersData.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-        return timeA - timeB;
-      });
-      
-      setOrders(ordersData);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'orders');
-      setLoading(false);
-    });
+    const loadOrders = async () => {
+      try {
+        const ordersData = await fetchOrders();
+        ordersData.sort((a, b) => {
+          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return timeA - timeB;
+        });
+        setOrders(ordersData);
+        setLoading(false);
+      } catch (error) {
+        console.error('Erro ao buscar pedidos:', error);
+        setLoading(false);
+      }
+    };
 
-    return () => unsubscribe();
+    loadOrders();
+    const interval = setInterval(loadOrders, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const validOrders = orders.filter(o => o.status !== 'cancelled');
   const paidOrders = orders.filter(o => ['paid', 'archived'].includes(o.status));
 
   // Summary Metrics
-  const totalRevenue = paidOrders.reduce((acc, curr) => acc + curr.totalAmount, 0);
+  const totalRevenue = paidOrders.reduce((acc, curr) => acc + curr.total_amount, 0);
   const todaysRevenue = paidOrders.filter(o => {
-    if (!o.createdAt?.toMillis) return false;
+    if (!o.created_at) return false;
     const today = new Date();
-    const orderDate = new Date(o.createdAt.toMillis());
+    const orderDate = new Date(o.created_at);
     return today.toDateString() === orderDate.toDateString();
-  }).reduce((acc, curr) => acc + curr.totalAmount, 0);
+  }).reduce((acc, curr) => acc + curr.total_amount, 0);
   const totalOrdersCount = validOrders.length;
-  const avgTicket = totalOrdersCount > 0 ? validOrders.reduce((acc, curr) => acc + curr.totalAmount, 0) / totalOrdersCount : 0;
+  const avgTicket = totalOrdersCount > 0 ? validOrders.reduce((acc, curr) => acc + curr.total_amount, 0) / totalOrdersCount : 0;
 
   // 1. Revenue per day (Last 7 days)
   const getRevenueByDay = () => {
@@ -89,10 +80,10 @@ export default function Reports() {
       endOfDay.setHours(23, 59, 59, 999);
       
       const dayTotal = paidOrders.filter(o => {
-          if (!o.createdAt?.toMillis) return false;
-          const time = o.createdAt.toMillis();
+          if (!o.created_at) return false;
+          const time = new Date(o.created_at).getTime();
           return time >= startOfDay.getTime() && time <= endOfDay.getTime();
-      }).reduce((acc, curr) => acc + curr.totalAmount, 0);
+      }).reduce((acc, curr) => acc + curr.total_amount, 0);
       
       result.push({
         date: dateStr,
@@ -124,9 +115,9 @@ export default function Reports() {
     const tableRevenue: Record<string, number> = {};
     
     validOrders.forEach(o => {
-        const tableName = o.tableNumber ? `Mesa ${o.tableNumber}` : 'Balcão/Delivery';
+        const tableName = o.table_id ? `Mesa ${o.table_id}` : 'Balcão/Delivery';
         if (!tableRevenue[tableName]) tableRevenue[tableName] = 0;
-        tableRevenue[tableName] += o.totalAmount;
+        tableRevenue[tableName] += o.total_amount;
     });
     
     return Object.entries(tableRevenue)
@@ -317,4 +308,3 @@ export default function Reports() {
     </main>
   );
 }
-
