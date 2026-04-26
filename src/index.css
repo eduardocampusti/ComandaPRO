@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary-50: var(--theme-50, #ecfdf5);
+  --color-primary-100: var(--theme-100, #d1fae5);
+  --color-primary-200: var(--theme-200, #a7f3d0);
+  --color-primary-300: var(--theme-300, #6ee7b7);
+  --color-primary-400: var(--theme-400, #34d399);
+  --color-primary-500: var(--theme-500, #10b981);
+  --color-primary-600: var(--theme-600, #059669);
+  --color-primary-700: var(--theme-700, #047857);
+  --color-primary-800: var(--theme-800, #065f46);
+  --color-primary-900: var(--theme-900, #064e3b);
+  --color-primary-950: var(--theme-950, #022c22);
+
+  --color-emerald-50: var(--theme-50, #ecfdf5);
+  --color-emerald-100: var(--theme-100, #d1fae5);
+  --color-emerald-200: var(--theme-200, #a7f3d0);
+  --color-emerald-300: var(--theme-300, #6ee7b7);
+  --color-emerald-400: var(--theme-400, #34d399);
+  --color-emerald-500: var(--theme-500, #10b981);
+  --color-emerald-600: var(--theme-600, #059669);
+  --color-emerald-700: var(--theme-700, #047857);
+  --color-emerald-800: var(--theme-800, #065f46);
+  --color-emerald-900: var(--theme-900, #064e3b);
+  --color-emerald-950: var(--theme-950, #022c22);
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50;
+  }
+}

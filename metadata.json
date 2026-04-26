@@ -1,0 +1,5 @@
+{
+  "name": "Comanda Digital Pro",
+  "description": "Sistema profissional de comanda digital via QR Code para bares e lanchonetes.",
+  "requestFramePermissions": []
+}
