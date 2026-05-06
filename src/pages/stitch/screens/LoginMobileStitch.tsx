@@ -165,7 +165,11 @@ const LoginMobileStitch: React.FC = () => {
         <main className="w-full max-w-md px-container-padding-mobile z-10 relative">
           {/* Brand / Header */}
           <div className="flex flex-col items-center mb-stack-lg">
-            <h1 className="font-h1 text-h1 text-primary italic font-black tracking-tighter mb-stack-sm">COMANDA PRO</h1>
+            <img
+              src="/Logo_comandPRO.png"
+              alt="COMANDA PRO"
+              className="mx-auto h-[64px] w-auto object-contain mb-stack-sm"
+            />
             <h2 className="font-h2 text-h2 text-on-surface text-center mb-unit">Entrar no painel</h2>
             <p className="font-body-md text-body-md text-on-surface-variant text-center">Acesse sua conta para gerenciar seu restaurante</p>
           </div>

@@ -112,7 +112,11 @@ export default function LoginStitch() {
       <main className="relative z-10 w-full max-w-md px-[16px] md:px-0">
         <div className="bg-surface rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-surface-variant overflow-hidden">
           <div className="p-[32px] flex flex-col items-center border-b border-surface-variant/50">
-            <span className="text-primary font-h1 italic tracking-tighter mb-[8px]">COMANDA PRO</span>
+            <img
+              src="/Logo_comandPRO.png"
+              alt="COMANDA PRO"
+              className="mx-auto h-[60px] w-auto object-contain mb-[8px]"
+            />
             <h1 className="font-h2 text-on-surface mb-[4px]">Entrar no painel</h1>
             <p className="font-body-sm text-on-surface-variant text-center">Acesse sua conta para gerenciar pedidos e configurações da loja.</p>
           </div>
