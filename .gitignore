@@ -6,3 +6,5 @@ dist
 *.local
 .DS_Store
 *.log
+scratch/
+supabase/.temp/

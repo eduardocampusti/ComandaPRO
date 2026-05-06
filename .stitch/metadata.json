@@ -1,0 +1,57 @@
+{
+  "name": "projects/5293229154161794662",
+  "projectId": "5293229154161794662",
+  "title": "Comanda Pro Digital 2026",
+  "visibility": "PUBLIC",
+  "createTime": "2026-05-02T22:43:14.834246Z",
+  "updateTime": "2026-05-04T20:04:40.279835Z",
+  "projectType": "TEXT_TO_UI_PRO",
+  "origin": "STITCH",
+  "deviceType": "MOBILE",
+  "designTheme": {
+    "colorMode": "LIGHT",
+    "font": "PLUS_JAKARTA_SANS",
+    "roundness": "ROUND_EIGHT",
+    "customColor": "#EA1D2C",
+    "headlineFont": "PLUS_JAKARTA_SANS",
+    "bodyFont": "INTER",
+    "labelFont": "INTER"
+  },
+  "screens": {
+    "login": {
+      "id": "ad72c69058dd4aafb95d8f7a37e324ca",
+      "sourceScreen": "projects/5293229154161794662/screens/ad72c69058dd4aafb95d8f7a37e324ca",
+      "x": 2386,
+      "y": 0,
+      "width": 390,
+      "height": 884
+    },
+    "menu": {
+      "id": "b59abb3622f8418590d5cc5533123c90",
+      "sourceScreen": "projects/5293229154161794662/screens/b59abb3622f8418590d5cc5533123c90",
+      "x": 1932,
+      "y": 0,
+      "width": 390,
+      "height": 1184
+    },
+    "cart": {
+      "id": "cc4aa39e6d1349ab9c32701ec8ab1565",
+      "sourceScreen": "projects/5293229154161794662/screens/cc4aa39e6d1349ab9c32701ec8ab1565",
+      "x": 1024,
+      "y": 0,
+      "width": 390,
+      "height": 1071
+    },
+    "checkout": {
+      "id": "ceb58c152b3440fba4b8c24c919325bd",
+      "sourceScreen": "projects/5293229154161794662/screens/ceb58c152b3440fba4b8c24c919325bd",
+      "x": 1478,
+      "y": 0,
+      "width": 390,
+      "height": 884
+    }
+  },
+  "metadata": {
+    "userRole": "OWNER"
+  }
+}

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>COMANDA PRO - Gestão de Mesas</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-error": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "on-primary-fixed-variant": "#930013",
+                        "tertiary-fixed": "#ffdea8",
+                        "secondary-fixed": "#e4e2e1",
+                        "on-tertiary-fixed-variant": "#5e4200",
+                        "on-surface-variant": "#5d3f3d",
+                        "tertiary-fixed-dim": "#ffba20",
+                        "primary-container": "#e6182a",
+                        "inverse-surface": "#2f3131",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-fixed-dim": "#c8c6c6",
+                        "primary": "#bb001b",
+                        "outline": "#926e6b",
+                        "on-error-container": "#93000a",
+                        "on-secondary-container": "#656464",
+                        "inverse-primary": "#ffb3ad",
+                        "secondary": "#5f5e5e",
+                        "surface": "#f9f9f9",
+                        "background": "#f9f9f9",
+                        "on-primary": "#ffffff",
+                        "on-secondary-fixed-variant": "#474747",
+                        "inverse-on-surface": "#f1f1f1",
+                        "surface-dim": "#dadada",
+                        "surface-bright": "#f9f9f9",
+                        "secondary-container": "#e4e2e1",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e2e2e2",
+                        "primary-fixed-dim": "#ffb3ad",
+                        "on-tertiary-container": "#fffbff",
+                        "surface-container-highest": "#e2e2e2",
+                        "surface-container-high": "#e8e8e8",
+                        "surface-tint": "#c0001c",
+                        "tertiary-container": "#986d00",
+                        "outline-variant": "#e7bcb9",
+                        "error-container": "#ffdad6",
+                        "surface-container-low": "#f3f3f3",
+                        "tertiary": "#795600",
+                        "on-surface": "#1a1c1c",
+                        "primary-fixed": "#ffdad7",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "on-primary-container": "#fffbff",
+                        "on-primary-fixed": "#410004",
+                        "surface-container": "#eeeeee",
+                        "on-background": "#1a1c1c",
+                        "on-tertiary-fixed": "#271900",
+                        "on-tertiary": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "section-gap": "48px",
+                        "container-padding-mobile": "16px",
+                        "stack-md": "16px",
+                        "container-padding-desktop": "40px",
+                        "stack-lg": "32px",
+                        "unit": "4px",
+                        "stack-sm": "8px"
+                    },
+                    "fontFamily": {
+                        "price-display": ["Plus Jakarta Sans"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "h3": ["Plus Jakarta Sans"],
+                        "h1": ["Plus Jakarta Sans"],
+                        "label-bold": ["Inter"],
+                        "h2": ["Plus Jakarta Sans"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "price-display": ["20px", { "lineHeight": "1.0", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "h3": ["20px", { "lineHeight": "1.3", "fontWeight": "700" }],
+                        "h1": ["32px", { "lineHeight": "1.2", "fontWeight": "800" }],
+                        "label-bold": ["14px", { "lineHeight": "1.0", "fontWeight": "600" }],
+                        "h2": ["24px", { "lineHeight": "1.3", "fontWeight": "700" }],
+                        "body-sm": ["14px", { "lineHeight": "1.4", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased overflow-hidden">
+<div class="flex h-screen w-full flex-col md:flex-row">
+<!-- Sidebar NavigationDrawer (Desktop) -->
+<nav class="hidden md:flex flex-col h-screen p-4 space-y-2 bg-white dark:bg-zinc-950 border-r border-zinc-100 dark:border-zinc-800 h-full w-72 rounded-none z-10 shrink-0">
+<div class="text-red-600 font-black text-xl mb-8 flex items-center gap-3 px-2">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">restaurant</span>
+                COMANDA PRO
+            </div>
+<div class="flex items-center gap-3 px-2 mb-6">
+<div class="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden">
+<img alt="Admin User" class="w-full h-full object-cover" data-alt="A close-up portrait of a professional restaurant manager in a modern, brightly lit environment. The lighting is soft and flattering, emphasizing a clean, corporate modern aesthetic. The color palette is neutral with sharp focus on the subject. The mood is confident and welcoming." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCbJSS3c8eWirmElkZSsZUgKka2attfQ3TQaxTgXav80nzAQGRzOCvkIUX-CByUtnhTAYlJUbQ-9DHlTplHV7IxYoGwemTBNQ9IcD9ZH8WE-8H6mVXJgpp82mwJOg4G3mwj26YpYU8N5DciX3HSTCwmgcum9qSQHxJF2QuXag2Dg6GHs7H2YszBzqBmPckbnNSfED6-IW5i85GcfJKqAsuxdq16ykYZ5qPjg2v0E3iRhY532juDdH3e7L6LVhk9GVGt58SBpjMHyPE"/>
+</div>
+<div>
+<div class="font-label-bold text-on-surface">Store Admin</div>
+<div class="font-body-sm text-secondary">Central Kitchen #01</div>
+</div>
+</div>
+<a class="flex items-center gap-3 px-3 py-2.5 font-['Plus_Jakarta_Sans'] text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-lg hover:translate-x-1 transition-transform duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-3 py-2.5 font-['Plus_Jakarta_Sans'] text-sm font-medium bg-red-50 dark:bg-red-900/10 text-red-600 font-bold rounded-lg duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">notifications_active</span>
+                Live Orders
+            </a>
+<a class="flex items-center gap-3 px-3 py-2.5 font-['Plus_Jakarta_Sans'] text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-lg hover:translate-x-1 transition-transform duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">edit_note</span>
+                Menu Editor
+            </a>
+<a class="flex items-center gap-3 px-3 py-2.5 font-['Plus_Jakarta_Sans'] text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-lg hover:translate-x-1 transition-transform duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">bar_chart</span>
+                Analytics
+            </a>
+<a class="flex items-center gap-3 px-3 py-2.5 font-['Plus_Jakarta_Sans'] text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-lg hover:translate-x-1 transition-transform duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">settings</span>
+                Settings
+            </a>
+<a class="flex items-center gap-3 px-3 py-2.5 font-['Plus_Jakarta_Sans'] text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-lg hover:translate-x-1 transition-transform duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">group</span>
+                Staff
+            </a>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-full overflow-hidden relative bg-surface">
+<!-- TopAppBar (Mobile) -->
+<header class="md:hidden flex items-center justify-between px-4 py-3 w-full h-16 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md docked full-width top-0 sticky z-50 border-b border-zinc-100 dark:border-zinc-800 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+<button class="text-red-600 dark:text-red-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors active:scale-95 duration-150 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="text-red-600 dark:text-red-500 font-black tracking-tighter italic text-xl">
+                    COMANDA PRO
+                </div>
+<button class="text-red-600 dark:text-red-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors active:scale-95 duration-150 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined">search</span>
+</button>
+</header>
+<!-- Scrollable Canvas -->
+<div class="flex-1 overflow-y-auto p-container-padding-mobile md:p-container-padding-desktop pb-32 md:pb-container-padding-desktop">
+<!-- Page Header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-stack-md mb-stack-lg">
+<div>
+<h1 class="font-h1 text-h1 text-on-surface">Gestão de Mesas</h1>
+<p class="font-body-md text-secondary mt-1">Acompanhe e gerencie o status das mesas em tempo real.</p>
+</div>
+<button class="bg-primary text-on-primary rounded-full px-6 py-3 font-label-bold text-label-bold flex items-center justify-center gap-2 shadow-[0_8px_30px_rgba(234,29,44,0.15)] hover:bg-primary-container hover:text-on-primary-container transition-colors active:scale-95">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">qr_code_2</span>
+                        Gerar QR Code
+                    </button>
+</div>
+<!-- Filters -->
+<div class="flex overflow-x-auto pb-4 mb-stack-md gap-3 hide-scrollbar">
+<button class="shrink-0 px-5 py-2 rounded-full bg-surface-tint text-on-primary font-label-bold text-label-bold shadow-sm transition-all">
+                        Todos
+                    </button>
+<button class="shrink-0 px-5 py-2 rounded-full bg-surface-container text-on-surface hover:bg-surface-container-high font-label-bold text-label-bold transition-all">
+                        Livre
+                    </button>
+<button class="shrink-0 px-5 py-2 rounded-full bg-surface-container text-on-surface hover:bg-surface-container-high font-label-bold text-label-bold transition-all">
+                        Ocupada
+                    </button>
+<button class="shrink-0 px-5 py-2 rounded-full bg-surface-container text-on-surface hover:bg-surface-container-high font-label-bold text-label-bold transition-all">
+                        Aguardando Pagamento
+                    </button>
+</div>
+<!-- Tables Grid -->
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-stack-md">
+<!-- Table Card: Livre -->
+<div class="bg-surface-container-lowest rounded-xl p-4 flex flex-col shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-container relative overflow-hidden group hover:-translate-y-1 transition-transform duration-200 cursor-pointer">
+<div class="flex justify-between items-start mb-8">
+<h2 class="font-h2 text-h2 text-on-surface">01</h2>
+<span class="px-2 py-1 rounded-md bg-secondary-container text-on-secondary-container font-label-bold text-[10px] uppercase tracking-wider">Livre</span>
+</div>
+<div class="mt-auto">
+<p class="font-body-sm text-secondary mb-1">Total Parcial</p>
+<p class="font-price-display text-price-display text-secondary-fixed-dim">R$ 0,00</p>
+</div>
+</div>
+<!-- Table Card: Ocupada -->
+<div class="bg-surface-container-lowest rounded-xl p-4 flex flex-col shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-container relative overflow-hidden group hover:-translate-y-1 transition-transform duration-200 cursor-pointer">
+<div class="absolute top-0 left-0 w-full h-1 bg-primary"></div>
+<div class="flex justify-between items-start mb-8">
+<h2 class="font-h2 text-h2 text-on-surface">02</h2>
+<span class="px-2 py-1 rounded-md bg-primary-container text-on-primary-container font-label-bold text-[10px] uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">schedule</span>
+                                45 min
+                            </span>
+</div>
+<div class="mt-auto">
+<p class="font-body-sm text-secondary mb-1">Total Parcial</p>
+<p class="font-price-display text-price-display text-primary">R$ 142,50</p>
+</div>
+</div>
+<!-- Table Card: Aguardando Pagamento -->
+<div class="bg-surface-container-lowest rounded-xl p-4 flex flex-col shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-container relative overflow-hidden group hover:-translate-y-1 transition-transform duration-200 cursor-pointer">
+<div class="absolute top-0 left-0 w-full h-1 bg-tertiary"></div>
+<div class="flex justify-between items-start mb-8">
+<h2 class="font-h2 text-h2 text-on-surface">03</h2>
+<span class="px-2 py-1 rounded-md bg-tertiary-container text-tertiary font-label-bold text-[10px] uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">payments</span>
+                                Aguardando
+                            </span>
+</div>
+<div class="mt-auto">
+<p class="font-body-sm text-secondary mb-1">Total Final</p>
+<p class="font-price-display text-price-display text-tertiary">R$ 89,90</p>
+</div>
+</div>
+<!-- Table Card: Ocupada -->
+<div class="bg-surface-container-lowest rounded-xl p-4 flex flex-col shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-container relative overflow-hidden group hover:-translate-y-1 transition-transform duration-200 cursor-pointer">
+<div class="absolute top-0 left-0 w-full h-1 bg-primary"></div>
+<div class="flex justify-between items-start mb-8">
+<h2 class="font-h2 text-h2 text-on-surface">04</h2>
+<span class="px-2 py-1 rounded-md bg-primary-container text-on-primary-container font-label-bold text-[10px] uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">schedule</span>
+                                12 min
+                            </span>
+</div>
+<div class="mt-auto">
+<p class="font-body-sm text-secondary mb-1">Total Parcial</p>
+<p class="font-price-display text-price-display text-primary">R$ 35,00</p>
+</div>
+</div>
+<!-- Table Card: Livre -->
+<div class="bg-surface-container-lowest rounded-xl p-4 flex flex-col shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-container relative overflow-hidden group hover:-translate-y-1 transition-transform duration-200 cursor-pointer">
+<div class="flex justify-between items-start mb-8">
+<h2 class="font-h2 text-h2 text-on-surface">05</h2>
+<span class="px-2 py-1 rounded-md bg-secondary-container text-on-secondary-container font-label-bold text-[10px] uppercase tracking-wider">Livre</span>
+</div>
+<div class="mt-auto">
+<p class="font-body-sm text-secondary mb-1">Total Parcial</p>
+<p class="font-price-display text-price-display text-secondary-fixed-dim">R$ 0,00</p>
+</div>
+</div>
+<!-- Table Card: Livre -->
+<div class="bg-surface-container-lowest rounded-xl p-4 flex flex-col shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-container relative overflow-hidden group hover:-translate-y-1 transition-transform duration-200 cursor-pointer">
+<div class="flex justify-between items-start mb-8">
+<h2 class="font-h2 text-h2 text-on-surface">06</h2>
+<span class="px-2 py-1 rounded-md bg-secondary-container text-on-secondary-container font-label-bold text-[10px] uppercase tracking-wider">Livre</span>
+</div>
+<div class="mt-auto">
+<p class="font-body-sm text-secondary mb-1">Total Parcial</p>
+<p class="font-price-display text-price-display text-secondary-fixed-dim">R$ 0,00</p>
+</div>
+</div>
+<!-- Table Card: Ocupada -->
+<div class="bg-surface-container-lowest rounded-xl p-4 flex flex-col shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-container relative overflow-hidden group hover:-translate-y-1 transition-transform duration-200 cursor-pointer">
+<div class="absolute top-0 left-0 w-full h-1 bg-primary"></div>
+<div class="flex justify-between items-start mb-8">
+<h2 class="font-h2 text-h2 text-on-surface">07</h2>
+<span class="px-2 py-1 rounded-md bg-primary-container text-on-primary-container font-label-bold text-[10px] uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">schedule</span>
+                                85 min
+                            </span>
+</div>
+<div class="mt-auto">
+<p class="font-body-sm text-secondary mb-1">Total Parcial</p>
+<p class="font-price-display text-price-display text-primary">R$ 310,20</p>
+</div>
+</div>
+</div>
+</div>
+<!-- BottomNavBar (Mobile) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pt-3 pb-6 bg-zinc-900 dark:bg-black docked full-width bottom-0 rounded-t-2xl shadow-[0_-8px_30px_rgba(234,29,44,0.15)]">
+<a class="flex flex-col items-center justify-center text-zinc-400 hover:text-white transition-all active:translate-y-1 duration-200" href="#">
+<span class="material-symbols-outlined mb-1">restaurant_menu</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold">Menu</span>
+</a>
+<a class="flex flex-col items-center justify-center text-red-500 scale-110 hover:text-white transition-all active:translate-y-1 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">receipt_long</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold">Orders</span>
+</a>
+<a class="flex flex-col items-center justify-center text-zinc-400 hover:text-white transition-all active:translate-y-1 duration-200" href="#">
+<span class="material-symbols-outlined mb-1">person</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold">Profile</span>
+</a>
+<a class="flex flex-col items-center justify-center text-zinc-400 hover:text-white transition-all active:translate-y-1 duration-200" href="#">
+<span class="material-symbols-outlined mb-1">shopping_bag</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold">Cart</span>
+</a>
+</nav>
+</main>
+</div>
+</body></html>

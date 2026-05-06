@@ -33,6 +33,15 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   }, []);
 
   const checkSubscription = async (userId: string) => {
+    // [MODO TESTE/DEV] - Bypass seguro apenas para desenvolvimento
+    // Permite acessar o sistema mesmo sem assinatura ativa se a flag estiver ligada no .env
+    if (import.meta.env.DEV && import.meta.env.VITE_BYPASS_SUBSCRIPTION_CHECK === 'true') {
+      console.warn('⚠️ [MODO TESTE] Bypass de assinatura ativo. Acesso liberado apenas em ambiente de desenvolvimento.');
+      setSubscriptionActive(true);
+      setLoading(false);
+      return;
+    }
+
     try {
       // Busca o restaurante vinculado ao profile do usuário
       const { data: profile } = await supabase

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Detalhe do Produto</title>
+<!-- Google Fonts: Plus Jakarta Sans for headings/price, Inter for body -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Plus+Jakarta+Sans:ital,wght@0,700;0,800;1,900&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#dadada",
+                        "inverse-primary": "#ffb3ad",
+                        "inverse-on-surface": "#f1f1f1",
+                        "on-tertiary": "#ffffff",
+                        "on-surface": "#1a1c1c",
+                        "primary-container": "#e6182a",
+                        "on-secondary-fixed-variant": "#474747",
+                        "tertiary": "#795600",
+                        "primary": "#bb001b",
+                        "on-tertiary-fixed": "#271900",
+                        "tertiary-fixed": "#ffdea8",
+                        "on-tertiary-container": "#fffbff",
+                        "on-surface-variant": "#5d3f3d",
+                        "surface-container-highest": "#e2e2e2",
+                        "on-secondary-container": "#656464",
+                        "surface-variant": "#e2e2e2",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed-dim": "#c8c6c6",
+                        "surface-container-low": "#f3f3f3",
+                        "surface-container": "#eeeeee",
+                        "surface-container-high": "#e8e8e8",
+                        "outline": "#926e6b",
+                        "on-error": "#ffffff",
+                        "secondary": "#5f5e5e",
+                        "secondary-fixed": "#e4e2e1",
+                        "surface-bright": "#f9f9f9",
+                        "on-primary-fixed": "#410004",
+                        "on-primary-fixed-variant": "#930013",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed-dim": "#ffb3ad",
+                        "error-container": "#ffdad6",
+                        "on-background": "#1a1c1c",
+                        "on-tertiary-fixed-variant": "#5e4200",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "error": "#ba1a1a",
+                        "secondary-container": "#e4e2e1",
+                        "surface": "#f9f9f9",
+                        "inverse-surface": "#2f3131",
+                        "on-primary-container": "#fffbff",
+                        "primary-fixed": "#ffdad7",
+                        "tertiary-fixed-dim": "#ffba20",
+                        "outline-variant": "#e7bcb9",
+                        "on-primary": "#ffffff",
+                        "tertiary-container": "#986d00",
+                        "surface-tint": "#c0001c",
+                        "background": "#f9f9f9"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-lg": "32px",
+                        "unit": "4px",
+                        "section-gap": "48px",
+                        "stack-sm": "8px",
+                        "container-padding-mobile": "16px",
+                        "container-padding-desktop": "40px",
+                        "stack-md": "16px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Inter"],
+                        "h2": ["Plus Jakarta Sans"],
+                        "h3": ["Plus Jakarta Sans"],
+                        "h1": ["Plus Jakarta Sans"],
+                        "body-md": ["Inter"],
+                        "label-bold": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "price-display": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "h2": ["24px", {"lineHeight": "1.3", "fontWeight": "700"}],
+                        "h3": ["20px", {"lineHeight": "1.3", "fontWeight": "700"}],
+                        "h1": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "label-bold": ["14px", {"lineHeight": "1.0", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "price-display": ["20px", {"lineHeight": "1.0", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background min-h-screen pb-[120px] font-body-md text-body-md text-on-background antialiased selection:bg-primary-fixed selection:text-on-primary-fixed">
+<div class="relative w-full h-[400px] bg-surface-container-high">
+<img alt="Cheese Bacon Burger" class="w-full h-full object-cover" data-alt="A macro, ultra-high-resolution photograph of a massive, indulgent double bacon cheeseburger. The brioche bun is perfectly toasted and glistening, resting atop thick, melting slices of vibrant yellow cheddar cheese that cascade down two charred, juicy beef patties. Crispy, wavy strips of high-saturation red-brown bacon protrude appetizingly from the sides. The burger sits in the center of the frame against a clean, bright, and slightly blurred light gray background, adhering to a high-end corporate modern aesthetic. The lighting is studio-quality, creating a mouth-watering, crave-inducing highlight on the meat juices and cheese. The overall color palette is dominated by stark white, charcoal gray, and intense, appetizing reds and yellows." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCwsMH-IpHEBwECzpdXre4Y7J6w2oeSdGctBitt5zTwy-TtSJ3l-wdYMLM2oJ4CAyOALabDfUP-ZNNfbg6EJWPti_Kkb3ooxpvyjTF9zr2aQPzrXNoU0gBy3z3_PbRiCPwqURVOkbH-yAFTsYXfXRJxhhcvC5NY5S4cds9PCRItsY505WVha5h-bmnJTzSauknXwe-CyKi85vNZO16J9hwiGd60gKfm8gNjDJ8stiLn1V7lFMOPUjKTkFaANsDiuy9sY4IEwRlpy5I"/>
+<button class="absolute top-4 left-container-padding-mobile w-11 h-11 bg-surface-container-lowest/90 backdrop-blur-md rounded-full flex items-center justify-center shadow-[0_4px_20px_rgba(0,0,0,0.1)] active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-on-surface">close</span>
+</button>
+</div>
+<div class="relative -mt-8 bg-surface-container-lowest rounded-t-[32px] px-container-padding-mobile pt-stack-lg flex flex-col gap-section-gap z-10 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+<section class="flex flex-col gap-stack-sm">
+<div class="flex items-start justify-between gap-4">
+<h1 class="font-h1 text-h1 text-on-surface flex-1">Cheese Bacon</h1>
+<span class="font-price-display text-price-display text-primary whitespace-nowrap mt-2">R$ 32,90</span>
+</div>
+<p class="font-body-md text-body-md text-on-secondary-container mt-2">
+                Hambúrguer artesanal de 180g de puro Angus, queijo cheddar inglês derretido, generosas fatias de bacon rústico super crocante, alface americana fresca, tomate italiano e nosso molho especial da casa, servido em um pão brioche amanteigado e selado.
+            </p>
+</section>
+<section class="flex flex-col gap-stack-md">
+<div class="flex items-baseline justify-between">
+<h2 class="font-h3 text-h3 text-on-surface">Adicionais</h2>
+<span class="font-body-sm text-body-sm text-secondary">Escolha até 3</span>
+</div>
+<div class="flex flex-col gap-[2px] bg-surface-container-high rounded-xl overflow-hidden border border-surface-container-high">
+<label class="flex items-center justify-between p-4 bg-surface-container-lowest hover:bg-surface-container-low transition-colors cursor-pointer group">
+<div class="flex items-center gap-4">
+<div class="relative flex items-center justify-center w-6 h-6">
+<input class="peer appearance-none w-6 h-6 border-2 border-surface-dim rounded checked:bg-primary checked:border-primary transition-all cursor-pointer" type="checkbox"/>
+<span class="material-symbols-outlined text-on-primary absolute pointer-events-none opacity-0 peer-checked:opacity-100 text-[18px]">check</span>
+</div>
+<span class="font-label-bold text-label-bold text-on-surface group-hover:text-primary transition-colors">Extra Queijo Cheddar</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary">+R$ 4,00</span>
+</label>
+<label class="flex items-center justify-between p-4 bg-surface-container-lowest hover:bg-surface-container-low transition-colors cursor-pointer group">
+<div class="flex items-center gap-4">
+<div class="relative flex items-center justify-center w-6 h-6">
+<input class="peer appearance-none w-6 h-6 border-2 border-surface-dim rounded checked:bg-primary checked:border-primary transition-all cursor-pointer" type="checkbox"/>
+<span class="material-symbols-outlined text-on-primary absolute pointer-events-none opacity-0 peer-checked:opacity-100 text-[18px]">check</span>
+</div>
+<span class="font-label-bold text-label-bold text-on-surface group-hover:text-primary transition-colors">Bacon Crocante Rústico</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary">+R$ 5,00</span>
+</label>
+<label class="flex items-center justify-between p-4 bg-surface-container-lowest hover:bg-surface-container-low transition-colors cursor-pointer group">
+<div class="flex items-center gap-4">
+<div class="relative flex items-center justify-center w-6 h-6">
+<input class="peer appearance-none w-6 h-6 border-2 border-surface-dim rounded checked:bg-primary checked:border-primary transition-all cursor-pointer" type="checkbox"/>
+<span class="material-symbols-outlined text-on-primary absolute pointer-events-none opacity-0 peer-checked:opacity-100 text-[18px]">check</span>
+</div>
+<span class="font-label-bold text-label-bold text-on-surface group-hover:text-primary transition-colors">Hambúrguer Extra (180g)</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary">+R$ 12,00</span>
+</label>
+</div>
+</section>
+<section class="flex flex-col gap-stack-md">
+<h2 class="font-h3 text-h3 text-on-surface">Observações</h2>
+<textarea class="w-full bg-surface-container-low border border-transparent focus:border-primary focus:ring-1 focus:ring-primary rounded-xl p-4 font-body-sm text-body-sm text-on-surface placeholder:text-secondary-fixed-dim resize-none h-28 transition-all" placeholder="Ex: Tirar cebola, maionese à parte, carne bem passada..."></textarea>
+</section>
+</div>
+<div class="fixed bottom-0 left-0 w-full bg-surface-container-lowest px-container-padding-mobile pt-4 pb-6 shadow-[0_-8px_30px_rgba(234,29,44,0.15)] flex items-center gap-4 z-50 rounded-t-2xl">
+<div class="flex items-center justify-between bg-surface-container-low rounded-full h-14 px-2 border border-surface-container-highest min-w-[120px]">
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-secondary hover:bg-surface-container-highest transition-colors active:scale-95">
+<span class="material-symbols-outlined">remove</span>
+</button>
+<span class="font-h3 text-h3 text-on-surface w-8 text-center">1</span>
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-primary hover:bg-primary-fixed transition-colors active:scale-95">
+<span class="material-symbols-outlined">add</span>
+</button>
+</div>
+<button class="flex-1 h-14 bg-primary rounded-full flex items-center justify-between px-6 shadow-[0_4px_20px_rgba(187,0,27,0.25)] active:scale-[0.98] transition-transform">
+<span class="font-label-bold text-label-bold text-on-primary">Adicionar ao Carrinho</span>
+<span class="font-price-display text-[16px] text-on-primary">R$ 32,90</span>
+</button>
+</div>
+</body></html>

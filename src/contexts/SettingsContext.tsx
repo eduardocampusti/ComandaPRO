@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { fetchSettings, updateSettings as saveSettings } from '../lib/database';
+import { supabase } from '../lib/supabase';
 
 export interface AppSettings {
   themeColor: string;
@@ -9,11 +10,12 @@ export interface AppSettings {
   cnpj: string;
   address: string;
   phone: string;
+  restaurantId?: string;
 }
 
 const defaultSettings: AppSettings = {
-  themeColor: 'emerald',
-  customThemeHex: '#10b981',
+  themeColor: 'red',
+  customThemeHex: '#EA1D2C',
   logoUrl: '',
   businessName: 'Comanda Digital Pro',
   cnpj: '',
@@ -30,6 +32,9 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export const palettes: Record<string, Record<number, string>> = {
+  red: {
+    50: '#fff1f2', 100: '#ffe4e6', 200: '#fecdd3', 300: '#fda4af', 400: '#fb7185', 500: '#EA1D2C', 600: '#BB001B', 700: '#930013', 800: '#6f0010', 900: '#410004', 950: '#260002'
+  },
   emerald: {
     50: '#ecfdf5', 100: '#d1fae5', 200: '#a7f3d0', 300: '#6ee7b7', 400: '#34d399', 500: '#10b981', 600: '#059669', 700: '#047857', 800: '#065f46',  900: '#064e3b', 950: '#022c22'
   },
@@ -99,6 +104,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadSettings = async () => {
       try {
+        // Only attempt to fetch if we might have access (not logged in users will fail anyway if RLS is strict)
+        // But for Public Menu, we rely on the data returned by get_public_menu RPC anyway.
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          setLoading(false);
+          return;
+        }
+
         const data = await fetchSettings();
         if (data) {
           setSettings({
@@ -109,12 +122,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
             cnpj: data.cnpj,
             address: data.address,
             phone: data.phone,
+            restaurantId: data.restaurant_id,
           });
-        } else {
-          setSettings(defaultSettings);
         }
-      } catch (error) {
-        console.error('Error loading settings:', error);
+      } catch (error: any) {
+        // Only log if it's not a permission error for anon users
+        if (error?.code !== '42501') {
+          console.error('Error loading settings:', error);
+        }
       } finally {
         setLoading(false);
       }
@@ -122,7 +137,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     loadSettings();
 
-    const interval = setInterval(loadSettings, 5000);
+    // Only poll if we have a session
+    const interval = setInterval(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        loadSettings();
+      }
+    }, 30000); // Increased interval to 30s
     return () => clearInterval(interval);
   }, []);
 
@@ -130,9 +151,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let palette = palettes[settings.themeColor];
     if (settings.themeColor === 'custom') {
-      palette = generatePalette(settings.customThemeHex || '#10b981');
+      palette = generatePalette(settings.customThemeHex || '#EA1D2C');
     } else if (!palette) {
-      palette = palettes.emerald;
+      palette = palettes.red;
     }
     
     const root = document.documentElement;
@@ -152,6 +173,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       cnpj: merged.cnpj,
       address: merged.address,
       phone: merged.phone,
+      restaurant_id: merged.restaurantId,
     });
     setSettings(merged);
   };

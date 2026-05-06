@@ -25,23 +25,59 @@ export interface ReservationData {
   created_at?: string;
 }
 
+export interface CategoryData {
+  id: string;
+  name: string;
+  sort_order: number;
+  active: boolean;
+  created_at?: string;
+}
+
+export interface MenuItemOptionData {
+  id: string;
+  menu_item_id: string;
+  name: string;
+  price: number;
+  type: 'addon' | 'size' | 'choice';
+  group_name?: string;
+  min_select?: number;
+  max_select?: number | null;
+  sort_order: number;
+  active: boolean;
+  created_at?: string;
+}
+
 export interface MenuItemData {
   id: string;
   name: string;
   description?: string;
   price: number;
   category: string;
+  category_id?: string;
   image_url?: string;
   available: boolean;
+  is_archived: boolean;
+  track_stock: boolean;
+  stock_quantity: number;
+  stock_alert_threshold: number;
   created_at?: string;
+  options?: MenuItemOptionData[];
+}
+
+export interface CartItemOption {
+  id: string;
+  name: string;
+  price: number;
 }
 
 export interface CartItem {
+  cart_item_id: string; // Unique ID for the cart item instance
   menu_item_id: string;
   name: string;
   price: number;
   quantity: number;
   notes?: string;
+  options?: CartItemOption[];
 }
 
 export interface OrderData {
@@ -68,6 +104,27 @@ export interface AppSettings {
   cnpj: string;
   address: string;
   phone: string;
+  restaurant_id?: string;
+}
+
+export interface PublicRestaurantData {
+  business_name: string;
+  logo_url: string;
+  theme_color: string;
+  custom_theme_hex: string;
+}
+
+export interface PublicMenuResponse {
+  table: Pick<TableData, 'id' | 'number' | 'status' | 'active'>;
+  restaurant: PublicRestaurantData;
+  categories: string[];
+  items: MenuItemData[];
+  orders: OrderData[];
+}
+
+export interface PublicOrderOptions {
+  customerName?: string;
+  notes?: string;
 }
 
 // ========== Realtime helpers ==========
@@ -78,7 +135,7 @@ export function subscribeToTable(
   filter?: string
 ): RealtimeChannel {
   const channel = supabase
-    .channel(`${table}-changes`)
+    .channel(`${table}-changes-${Math.random()}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table, filter: filter as string | undefined },
@@ -88,8 +145,78 @@ export function subscribeToTable(
   return channel;
 }
 
+export function subscribeToTableStatus(tableId: string, callback: (status: string) => void) {
+  return supabase
+    .channel(`table-status-${tableId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'tables', filter: `id=eq.${tableId}` },
+      (payload) => callback(payload.new.status)
+    )
+    .subscribe();
+}
+
+export function subscribeToTableOrders(tableId: string, callback: () => void) {
+  return supabase
+    .channel(`table-orders-${tableId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'orders', filter: `table_id=eq.${tableId}` },
+      () => callback()
+    )
+    .subscribe();
+}
+
+export function subscribeToTables(callback: () => void) {
+  return supabase
+    .channel('all-tables')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => callback())
+    .subscribe();
+}
+
+export function subscribeToOrders(callback: () => void) {
+  return supabase
+    .channel('all-orders')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => callback())
+    .subscribe();
+}
+
 export function unsubscribe(channel: RealtimeChannel) {
   supabase.removeChannel(channel);
+}
+
+// ========== Public QR RPCs ==========
+
+export async function getPublicMenu(tableId: string): Promise<PublicMenuResponse> {
+  const { data, error } = await supabase.rpc('get_public_menu', {
+    p_table_id: tableId,
+  });
+
+  if (error) throw error;
+  return normalizePublicMenu(data);
+}
+
+export async function createPublicOrder(
+  tableId: string,
+  items: CartItem[],
+  options: PublicOrderOptions = {}
+): Promise<OrderData> {
+  const rpcItems = items.map((item) => ({
+    menu_item_id: item.menu_item_id,
+    quantity: item.quantity,
+    notes: item.notes || null,
+    options: item.options ? item.options.map(opt => opt.id) : []
+  }));
+
+  const { data, error } = await supabase.rpc('create_public_order', {
+    p_table_id: tableId,
+    p_items: rpcItems,
+    p_customer_name: options.customerName || null,
+    p_notes: options.notes || null,
+  });
+
+  if (error) throw error;
+  return normalizeOrder(data);
 }
 
 // ========== Tables ==========
@@ -145,9 +272,40 @@ export async function updateReservation(id: string, updates: Partial<Reservation
   if (error) throw error;
 }
 
+export async function deleteReservation(id: string): Promise<void> {
+  const { error } = await supabase.from('reservations').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function checkExistingReservation(tableId: string, date: string, time: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('id')
+    .eq('table_id', tableId)
+    .eq('date', date)
+    .eq('time', time)
+    .neq('status', 'cancelled')
+    .maybeSingle();
+    
+  if (error) throw error;
+  return !!data;
+}
+
+export async function fetchAllActiveReservations(): Promise<ReservationData[]> {
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('*')
+    .neq('status', 'cancelled')
+    .order('date')
+    .order('time');
+    
+  if (error) throw error;
+  return (data || []).map(normalizeReservation);
+}
+
 // ========== Orders ==========
 
-export async function fetchOrders(filters?: { status?: string[]; tableId?: string }): Promise<OrderData[]> {
+export async function fetchOrders(filters?: { status?: string[]; tableId?: string; startDate?: string }): Promise<OrderData[]> {
   let query = supabase.from('orders').select('*');
 
   if (filters?.status && filters.status.length > 0) {
@@ -156,16 +314,30 @@ export async function fetchOrders(filters?: { status?: string[]; tableId?: strin
   if (filters?.tableId) {
     query = query.eq('table_id', filters.tableId);
   }
+  if (filters?.startDate) {
+    query = query.gte('created_at', filters.startDate);
+  }
 
   const { data, error } = await query;
   if (error) throw error;
   return (data || []).map(normalizeOrder);
 }
 
-export async function addOrder(order: Omit<OrderData, 'id'>): Promise<OrderData> {
+export async function getOrderHistory(tableId: string): Promise<OrderData[]> {
+  return fetchOrders({ tableId });
+}
+
+export async function createOrder(tableId: string, items: CartItem[]): Promise<OrderData> {
+  const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const { data, error } = await supabase
     .from('orders')
-    .insert(toSnakeCase({ ...order, createdAt: new Date().toISOString() }))
+    .insert(toSnakeCase({ 
+      tableId, 
+      items, 
+      status: 'pending', 
+      totalAmount,
+      createdAt: new Date().toISOString() 
+    }))
     .select()
     .single();
   if (error) throw error;
@@ -180,12 +352,14 @@ export async function updateOrder(id: string, updates: Partial<OrderData>): Prom
 // ========== Menu Items ==========
 
 export async function fetchMenuItems(): Promise<MenuItemData[]> {
-  const { data, error } = await supabase.from('menu_items').select('*');
+  const { data, error } = await supabase.from('menu_items').select('*').order('category', { ascending: true });
   if (error) throw error;
   return (data || []).map(normalizeMenuItem);
 }
 
-export async function addMenuItem(item: Omit<MenuItemData, 'id'>): Promise<MenuItemData> {
+export const getMenuItems = fetchMenuItems;
+
+export async function createMenuItem(item: Omit<MenuItemData, 'id'>): Promise<MenuItemData> {
   const { data, error } = await supabase
     .from('menu_items')
     .insert(toSnakeCase(item))
@@ -200,9 +374,111 @@ export async function updateMenuItem(id: string, updates: Partial<MenuItemData>)
   if (error) throw error;
 }
 
+export async function updateMenuItemAvailability(id: string, available: boolean): Promise<void> {
+  return updateMenuItem(id, { available });
+}
+
 export async function deleteMenuItem(id: string): Promise<void> {
   const { error } = await supabase.from('menu_items').delete().eq('id', id);
   if (error) throw error;
+}
+
+export async function archiveMenuItem(id: string): Promise<void> {
+  const { error } = await supabase.from('menu_items').update({ is_archived: true }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function hasMenuItemHistory(id: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('order_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('menu_item_id', id);
+    
+  if (error) throw error;
+  return (count || 0) > 0;
+}
+
+// ========== Categories ==========
+
+export async function fetchCategories(): Promise<CategoryData[]> {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .order('sort_order', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(normalizeCategory);
+}
+
+export async function createCategory(name: string, sortOrder: number = 0): Promise<CategoryData> {
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({ name, sort_order: sortOrder })
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeCategory(data);
+}
+
+export async function updateCategory(id: string, updates: Partial<CategoryData>): Promise<void> {
+  const { error } = await supabase.from('categories').update(toSnakeCase(updates)).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const { error } = await supabase.from('categories').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ========== Menu Item Options ==========
+
+export async function fetchMenuItemOptions(menuItemId: string): Promise<MenuItemOptionData[]> {
+  const { data, error } = await supabase
+    .from('menu_item_options')
+    .select('*')
+    .eq('menu_item_id', menuItemId)
+    .order('sort_order', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(normalizeMenuItemOption);
+}
+
+export async function saveMenuItemOption(option: Omit<MenuItemOptionData, 'id'>): Promise<MenuItemOptionData> {
+  const { data, error } = await supabase
+    .from('menu_item_options')
+    .insert(toSnakeCase(option))
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeMenuItemOption(data);
+}
+
+export async function updateMenuItemOption(id: string, updates: Partial<MenuItemOptionData>): Promise<void> {
+  const { error } = await supabase.from('menu_item_options').update(toSnakeCase(updates)).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteMenuItemOption(id: string): Promise<void> {
+  const { error } = await supabase.from('menu_item_options').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ========== Storage ==========
+
+export async function uploadImage(file: File, bucket: string = 'products'): Promise<string> {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+  const filePath = `${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(bucket)
+    .upload(filePath, file);
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage
+    .from(bucket)
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
 }
 
 // ========== Sessions ==========
@@ -224,7 +500,7 @@ export async function fetchSettings(): Promise<AppSettings | null> {
     .from('settings')
     .select('*')
     .eq('id', 'general')
-    .single();
+    .maybeSingle();
   if (error) {
     if (error.code === 'PGRST116') return null; // not found
     throw error;
@@ -233,18 +509,65 @@ export async function fetchSettings(): Promise<AppSettings | null> {
 }
 
 export async function updateSettings(settings: AppSettings): Promise<void> {
+  // Garantir que temos o restaurant_id para o upsert (chave primária composta)
+  let restaurantId = settings.restaurant_id;
+
+  if (!restaurantId) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('restaurant_id')
+      .single();
+      
+    if (profileError || !profile?.restaurant_id) {
+      throw new Error('Não foi possível identificar o seu restaurante. Verifique se seu perfil está configurado corretamente.');
+    }
+    restaurantId = profile.restaurant_id;
+  }
+
   const { error } = await supabase
     .from('settings')
-    .upsert({ id: 'general', ...toSnakeCase(settings) });
-  if (error) throw error;
+    .upsert({ 
+      ...toSnakeCase(settings),
+      id: 'general', 
+      restaurant_id: restaurantId,
+      updated_at: new Date().toISOString()
+    });
+    
+  if (error) {
+    console.error('Erro ao salvar configurações no Supabase:', error);
+    throw error;
+  }
 }
 
 // ========== Normalize helpers (snake_case DB → camelCase app) ==========
 
+function normalizePublicMenu(raw: any): PublicMenuResponse {
+  const table = raw?.table || {};
+  const restaurant = raw?.restaurant || {};
+
+  return {
+    table: {
+      id: table.id || '',
+      number: Number(table.number ?? 0),
+      status: (table.status || 'available') as TableData['status'],
+      active: table.active ?? false,
+    },
+    restaurant: {
+      business_name: restaurant.business_name ?? 'Comanda Digital Pro',
+      logo_url: restaurant.logo_url ?? '',
+      theme_color: restaurant.theme_color ?? 'emerald',
+      custom_theme_hex: restaurant.custom_theme_hex ?? '#10b981',
+    },
+    categories: Array.isArray(raw?.categories) ? raw.categories : [],
+    items: Array.isArray(raw?.items) ? raw.items.map(normalizeMenuItem) : [],
+    orders: Array.isArray(raw?.orders) ? raw.orders.map(normalizeOrder) : [],
+  };
+}
+
 function normalizeTable(raw: any): TableData {
   return {
     id: raw.id,
-    number: raw.number,
+    number: Number(raw.number),
     status: raw.status,
     capacity: raw.capacity,
     active: raw.active ?? false,
@@ -274,12 +597,13 @@ function normalizeOrder(raw: any): OrderData {
     items: (raw.items || []).map((item: any) => ({
       menu_item_id: item.menu_item_id || item.menuItemId,
       name: item.name,
-      price: item.price,
-      quantity: item.quantity,
+      price: Number(item.price ?? 0),
+      quantity: Number(item.quantity ?? 0),
       notes: item.notes,
+      options: item.options,
     })),
     status: raw.status,
-    total_amount: raw.total_amount ?? raw.totalAmount ?? 0,
+    total_amount: Number(raw.total_amount ?? raw.totalAmount ?? 0),
     created_at: raw.created_at,
   };
 }
@@ -289,10 +613,42 @@ function normalizeMenuItem(raw: any): MenuItemData {
     id: raw.id,
     name: raw.name,
     description: raw.description,
-    price: raw.price,
+    price: Number(raw.price ?? 0),
     category: raw.category,
+    category_id: raw.category_id,
     image_url: raw.image_url,
     available: raw.available ?? true,
+    is_archived: raw.is_archived ?? false,
+    track_stock: raw.track_stock ?? false,
+    stock_quantity: Number(raw.stock_quantity ?? 0),
+    stock_alert_threshold: Number(raw.stock_alert_threshold ?? 10),
+    created_at: raw.created_at,
+    options: Array.isArray(raw.options) ? raw.options.map(normalizeMenuItemOption) : undefined,
+  };
+}
+
+function normalizeCategory(raw: any): CategoryData {
+  return {
+    id: raw.id,
+    name: raw.name,
+    sort_order: raw.sort_order,
+    active: raw.active,
+    created_at: raw.created_at,
+  };
+}
+
+function normalizeMenuItemOption(raw: any): MenuItemOptionData {
+  return {
+    id: raw.id,
+    menu_item_id: raw.menu_item_id,
+    name: raw.name,
+    price: Number(raw.price ?? 0),
+    type: raw.type,
+    group_name: raw.group_name,
+    min_select: raw.min_select,
+    max_select: raw.max_select,
+    sort_order: raw.sort_order,
+    active: raw.active,
     created_at: raw.created_at,
   };
 }
@@ -307,6 +663,17 @@ function normalizeSession(raw: any): SessionData {
 }
 
 function normalizeSettings(raw: any): AppSettings {
+  if (!raw) {
+    return {
+      theme_color: 'emerald',
+      custom_theme_hex: '#10b981',
+      logo_url: '',
+      business_name: 'Comanda Digital Pro',
+      cnpj: '',
+      address: '',
+      phone: '',
+    };
+  }
   return {
     theme_color: raw.theme_color ?? 'emerald',
     custom_theme_hex: raw.custom_theme_hex ?? '#10b981',
@@ -315,6 +682,7 @@ function normalizeSettings(raw: any): AppSettings {
     cnpj: raw.cnpj ?? '',
     address: raw.address ?? '',
     phone: raw.phone ?? '',
+    restaurant_id: raw.restaurant_id,
   };
 }
 

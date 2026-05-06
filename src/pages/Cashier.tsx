@@ -1,493 +1,525 @@
-import { useState, useEffect } from 'react';
-import { fetchTables, fetchOrders, updateOrder, updateTable } from '../lib/database';
-import { Wallet, Store, Receipt, CheckCircle2, Search, Utensils, RotateCcw, AlertTriangle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  fetchOrders,
+  fetchTables,
+  subscribeToOrders,
+  subscribeToTables,
+  updateOrder,
+  updateTable,
+} from '../lib/database';
+import type { OrderData, TableData } from '../lib/database';
+import {
+  AlertCircle,
+  Check,
+  RefreshCw,
+  ReceiptText,
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { ClosedOrdersTable } from '../components/Cashier/ClosedOrdersTable';
+import { CloseTableConfirmationModal } from '../components/Cashier/CloseTableConfirmationModal';
+import { cx } from '../components/ui/AppPrimitives';
 
-interface TableData {
-  id: string;
-  number: number | string;
-  status: 'available' | 'occupied' | 'reserved';
-  capacity: number;
-  active?: boolean;
-  opened_at?: string;
-  current_session_id?: string | null;
-}
-
-interface CartItem {
-  menu_item_id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  notes?: string;
-}
-
-interface OrderData {
-  id: string;
-  table_id: string;
-  items: CartItem[];
-  status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'served' | 'paid' | 'archived' | 'cancelled';
-  total_amount: number;
-  created_at?: string;
-}
+type ViewMode = 'open' | 'closed';
 
 export default function Cashier() {
   const [tables, setTables] = useState<TableData[]>([]);
   const [orders, setOrders] = useState<OrderData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-
-  const [viewMode, setViewMode] = useState<'open' | 'closed'>('open');
   const [closedOrders, setClosedOrders] = useState<OrderData[]>([]);
-  const [selectedTableDetails, setSelectedTableDetails] = useState<TableData | null>(null);
-
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('open');
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [confirmModalData, setConfirmModalData] = useState<{table: TableData, hasPending: boolean} | null>(null);
+  
+  const showFeedback = (message: string, type: 'success' | 'error' = 'success') => {
+    setFeedback({ message, type });
+    window.setTimeout(() => setFeedback(null), 3000);
+  };
+
+  const handleRealtimeError = (realtimeError: unknown) => {
+    console.error('Erro ao sincronizar caixa:', realtimeError);
+    setError('Não foi possível sincronizar o caixa em tempo real.');
+  };
+
+  const loadTables = async () => {
+    const data = await fetchTables();
+    setTables(data);
+  };
+
+  const loadOrders = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const data = await fetchOrders({
+      status: ['pending', 'preparing', 'ready', 'delivered', 'served'],
+      startDate: today.toISOString(),
+    });
+    setOrders(data);
+  };
+
+  const loadClosedOrders = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const data = await fetchOrders({ 
+      status: ['paid'],
+      startDate: today.toISOString(),
+    });
+    setClosedOrders(data);
+  };
+
+  const loadAllData = async () => {
+    try {
+      setLoading(true);
+      await Promise.all([loadTables(), loadOrders(), loadClosedOrders()]);
+      setError(null);
+    } catch (loadError) {
+      console.error('Erro ao carregar caixa:', loadError);
+      setError('Não foi possível carregar o caixa. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadTables = async () => {
-      try {
-        const data = await fetchTables();
-        setTables(data);
-      } catch (error) {
-        console.error('Erro ao buscar mesas:', error);
-      }
-    };
+    void loadAllData();
 
-    const loadOrders = async () => {
-      try {
-        const data = await fetchOrders({
-          status: ['pending', 'preparing', 'ready', 'delivered', 'served']
-        });
-        setOrders(data);
-        setLoading(false);
-      } catch (error) {
-        console.error('Erro ao buscar pedidos:', error);
-        setLoading(false);
-      }
-    };
+    const tablesSubscription = subscribeToTables(() => {
+      loadTables().catch(handleRealtimeError);
+    });
 
-    const loadClosedOrders = async () => {
-      try {
-        const data = await fetchOrders({ status: ['paid'] });
-        setClosedOrders(data);
-      } catch (error) {
-        console.error('Erro ao buscar pedidos pagos:', error);
-      }
-    };
-
-    loadTables();
-    loadOrders();
-    loadClosedOrders();
-
-    const tablesInterval = setInterval(loadTables, 3000);
-    const ordersInterval = setInterval(loadOrders, 3000);
-    const closedOrdersInterval = setInterval(loadClosedOrders, 3000);
+    const ordersSubscription = subscribeToOrders(() => {
+      Promise.all([loadOrders(), loadClosedOrders()]).catch(handleRealtimeError);
+    });
 
     return () => {
-      clearInterval(tablesInterval);
-      clearInterval(ordersInterval);
-      clearInterval(closedOrdersInterval);
+      tablesSubscription.unsubscribe();
+      ordersSubscription.unsubscribe();
     };
   }, []);
 
   const getTableOrders = (tableId: string) => {
-    return orders.filter(o => o.table_id === tableId);
+    return orders.filter((order) => order.table_id === tableId);
   };
 
-  const getTableTotal = (tableOrders: OrderData[]) => {
-    return tableOrders.reduce((sum, order) => sum + order.total_amount, 0);
-  };
+  const selectedTable = useMemo(() => {
+    return tables.find(t => t.id === selectedTableId) || null;
+  }, [tables, selectedTableId]);
 
-  const handleCloseTableClick = (table: TableData) => {
-    const tableOrders = getTableOrders(table.id);
-    const unservedOrders = tableOrders.filter(o => o.status !== 'served');
-    
-    setConfirmModalData({ table, hasPending: unservedOrders.length > 0 });
-    setIsConfirmModalOpen(true);
-  };
+  const selectedTableOrders = useMemo(() => {
+    return selectedTableId ? getTableOrders(selectedTableId) : [];
+  }, [selectedTableId, orders]);
 
   const confirmCloseTable = async () => {
-    if (!confirmModalData) return;
-    
-    const { table } = confirmModalData;
-    const tableOrders = getTableOrders(table.id);
+    if (!selectedTable) return;
 
     try {
-      await Promise.all(tableOrders.map(o => updateOrder(o.id, { status: 'paid' })));
-      await updateTable(table.id, { 
-        status: 'available', 
-        active: false, 
-        current_session_id: null
+      const tableOrders = getTableOrders(selectedTable.id);
+      await Promise.all(tableOrders.map((order) => updateOrder(order.id, { status: 'paid' })));
+      await updateTable(selectedTable.id, {
+        status: 'available',
+        active: false,
+        current_session_id: null,
       });
 
       setIsConfirmModalOpen(false);
-      setConfirmModalData(null);
-      setSelectedTableDetails(null);
-    } catch (error) {
-      console.error('Erro ao fechar a mesa:', error);
+      setSelectedTableId(null);
+      showFeedback(`Mesa ${selectedTable.number} liberada`);
+      await Promise.all([loadTables(), loadOrders(), loadClosedOrders()]);
+    } catch (closeError) {
+      console.error('Erro ao fechar a mesa:', closeError);
+      showFeedback('Não foi possível fechar a mesa', 'error');
     }
   };
 
-  const occupiedTables = tables.filter(t => t.status === 'occupied' || getTableOrders(t.id).length > 0);
+  const occupiedTables = useMemo(() => {
+    return tables.filter((table) => table.status === 'occupied' || getTableOrders(table.id).length > 0);
+  }, [tables, orders]);
 
-  const filteredTables = occupiedTables.filter(t => {
-    if (!searchTerm) return true;
-    return String(t.number).toLowerCase().includes(searchTerm.toLowerCase());
-  });
+  const filteredTables = useMemo(() => {
+    return occupiedTables.filter((table) => {
+      if (!searchTerm) return true;
+      return String(table.number).toLowerCase().includes(searchTerm.toLowerCase());
+    });
+  }, [occupiedTables, searchTerm]);
 
-  const totalClosedAmount = closedOrders.reduce((sum, order) => sum + order.total_amount, 0);
-  const totalOpenAmount = orders.reduce((sum, order) => sum + order.total_amount, 0);
+  const totalClosedAmount = useMemo(
+    () => closedOrders.reduce((sum, order) => {
+      const amount = Number(order.total_amount);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0),
+    [closedOrders]
+  );
 
-  const paidOrdersCount = closedOrders.length;
-  const openTablesCount = occupiedTables.length;
+  const subtotal = useMemo(() => 
+    selectedTableOrders.reduce((sum, order) => {
+      const amount = Number(order.total_amount);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0),
+  [selectedTableOrders]);
+
+  const serviceCharge = subtotal * 0.1;
+  const totalToPay = subtotal + serviceCharge;
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-[calc(100vh-80px)]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 dark:border-primary-400"></div>
+      <div className="flex min-h-[calc(100vh-120px)] items-center justify-center px-6">
+        <div className="text-center">
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-red-100 border-t-red-600" />
+          <p className="mt-4 font-['Plus_Jakarta_Sans'] text-lg font-black text-zinc-950">
+            Sincronizando caixa
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <main className="max-w-[1400px] mx-auto p-4 sm:p-6 overflow-x-auto flex flex-col h-[calc(100vh-64px)]">
-      <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Wallet className="w-6 h-6 text-indigo-500" />
-            Caixa
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">
-            Gestão de contas abertas e fechamento de mesas do dia.
-          </p>
-        </div>
+    <div className="flex flex-col h-full bg-[#f9f9f9] text-[#1a1c1c] font-['Inter']" id="stitch-cashier-root">
+      <style dangerouslySetInnerHTML={{ __html: `
+        #stitch-cashier-root {
+          --primary: #bb001b;
+          --on-primary: #ffffff;
+          --surface: #f9f9f9;
+          --on-surface: #1a1c1c;
+          --secondary: #5f5e5e;
+          --outline-variant: #e7bcb9;
+          --surface-container-low: #f3f3f3;
+          --surface-container-lowest: #ffffff;
+          --primary-fixed: #ffdad7;
+          --on-primary-fixed: #410004;
+          --on-primary-fixed-variant: #930013;
+        }
+
+        #stitch-cashier-root .hide-scrollbar::-webkit-scrollbar { display: none; }
+        #stitch-cashier-root .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700 w-full sm:w-auto shrink-0">
+        #stitch-cashier-root .font-h1 { font-family: 'Plus Jakarta Sans'; font-size: 32px; font-weight: 800; line-height: 1.2; }
+        #stitch-cashier-root .font-h2 { font-family: 'Plus Jakarta Sans'; font-size: 24px; font-weight: 700; line-height: 1.3; }
+        #stitch-cashier-root .font-h3 { font-family: 'Plus Jakarta Sans'; font-size: 20px; font-weight: 700; line-height: 1.3; }
+        #stitch-cashier-root .font-price { font-family: 'Plus Jakarta Sans'; font-size: 20px; font-weight: 700; line-height: 1; }
+        #stitch-cashier-root .font-label-bold { font-family: 'Inter'; font-size: 14px; font-weight: 600; line-height: 1; }
+        #stitch-cashier-root .font-body-md { font-family: 'Inter'; font-size: 16px; font-weight: 400; line-height: 1.5; }
+        #stitch-cashier-root .font-body-sm { font-family: 'Inter'; font-size: 14px; font-weight: 400; line-height: 1.4; }
+      `}} />
+
+      {/* Header */}
+      <header className="bg-white/95 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-100 shadow-[0_4px_20px_rgba(0,0,0,0.05)] flex items-center justify-between px-4 py-3 w-full h-16 shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="text-[#bb001b] font-black tracking-tighter italic text-xl">COMANDA PRO</div>
+          <div className="h-6 w-px bg-[#e7bcb9] mx-2 hidden md:block"></div>
+          <h1 className="font-h3 text-[#1a1c1c] hidden md:block">Caixa Operacional</h1>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-full border border-zinc-200 bg-zinc-50 p-1">
             <button
               onClick={() => setViewMode('open')}
-              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'open' 
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
+              className={cx(
+                "px-4 py-1.5 rounded-full text-xs font-bold transition-all",
+                viewMode === 'open' ? "bg-white text-[#bb001b] shadow-sm" : "text-zinc-500"
+              )}
             >
               Mesas Abertas
             </button>
             <button
               onClick={() => setViewMode('closed')}
-              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'closed' 
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
+              className={cx(
+                "px-4 py-1.5 rounded-full text-xs font-bold transition-all",
+                viewMode === 'closed' ? "bg-white text-[#bb001b] shadow-sm" : "text-zinc-500"
+              )}
             >
-              Contas Pagas
+              Recebimentos
             </button>
           </div>
-
-          <div className="relative w-full sm:w-64">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-slate-400" />
-            </div>
-            <input
+          
+          <div className="relative hidden md:flex items-center">
+            <span className="material-symbols-outlined absolute left-3 text-[#5f5e5e] text-lg">search</span>
+            <input 
+              className="pl-10 pr-4 py-2 bg-[#f3f3f3] border border-[#e7bcb9] rounded-full font-body-sm text-sm focus:outline-none focus:border-[#bb001b] w-64 transition-all" 
+              placeholder="Buscar mesa..." 
               type="text"
-              placeholder="Buscar mesa..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"
             />
           </div>
+          
+          <button onClick={loadAllData} className="p-2 text-zinc-500 hover:bg-zinc-50 rounded-full transition-colors">
+            <RefreshCw className="h-5 w-5" />
+          </button>
         </div>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 shrink-0">
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center shrink-0">
-            <Store className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total em Aberto</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">R$ {totalOpenAmount.toFixed(2).replace('.', ',')}</p>
-            <p className="text-xs text-slate-400 mt-1">{openTablesCount} mesa{openTablesCount !== 1 ? 's' : ''} em andamento</p>
-          </div>
-        </div>
-        
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center shrink-0">
-            <Wallet className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Recebido (Pagos)</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">R$ {totalClosedAmount.toFixed(2).replace('.', ',')}</p>
-            <p className="text-xs text-slate-400 mt-1">{paidOrdersCount} pedido{paidOrdersCount !== 1 ? 's' : ''} fechado{paidOrdersCount !== 1 ? 's' : ''}</p>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-xl flex items-center justify-center shrink-0">
-            <Utensils className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Vendas Totais</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">R$ {(totalClosedAmount + totalOpenAmount).toFixed(2).replace('.', ',')}</p>
-            <p className="text-xs text-slate-400 mt-1">Previsão do momento</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto pr-2 pb-8">
-        {viewMode === 'open' ? (
-          filteredTables.length === 0 ? (
-            <div className="h-64 flex flex-col justify-center items-center text-slate-400 dark:text-slate-500">
-              <Store className="w-12 h-12 mb-4 opacity-20" />
-              <span className="text-lg font-medium">Nenhuma mesa com conta aberta.</span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {filteredTables.map(table => {
-                const tableOrders = getTableOrders(table.id);
-                const total = getTableTotal(tableOrders);
-                const hasPendingOrders = tableOrders.some(o => o.status !== 'served');
-
-                return (
-                  <div key={table.id} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 flex flex-col transition-all hover:shadow-md">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl font-bold">
-                          {table.number}
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-slate-900 dark:text-white">Mesa {table.number}</h3>
-                          <p className="text-xs font-medium text-slate-500 flex items-center gap-1 mt-0.5">
-                            <Receipt className="w-3.5 h-3.5" />
-                            {tableOrders.length} pedido{tableOrders.length !== 1 ? 's' : ''}
-                          </p>
-                        </div>
-                      </div>
-                      {hasPendingOrders && (
-                        <span className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs font-bold px-2 py-1 rounded-md flex items-center gap-1" title="Existem pedidos em preparo/entrega">
-                          <AlertTriangle className="w-3 h-3" />
-                          Abertos
-                        </span>
-                      )}
+      <div className="flex-1 flex gap-4 p-4 overflow-hidden min-h-0">
+        <AnimatePresence mode="wait">
+          {viewMode === 'open' ? (
+            <motion.div 
+              key="view-open"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex-1 flex gap-4 overflow-hidden"
+            >
+              {/* Sidebar: Mesas Abertas */}
+              <section className="w-1/4 min-w-[280px] max-w-[350px] bg-white border border-[#e7bcb9] rounded-xl flex flex-col shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                <div className="p-4 border-b border-[#e7bcb9] flex justify-between items-center bg-[#f3f3f3] rounded-t-xl shrink-0">
+                  <h2 className="font-h3 text-[#1a1c1c]">Mesas Abertas</h2>
+                  <span className="bg-[#bb001b] text-white font-label-bold text-[12px] px-2 py-0.5 rounded-full">
+                    {occupiedTables.length}
+                  </span>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-3 space-y-3 hide-scrollbar">
+                  {filteredTables.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <ReceiptText className="h-12 w-12 text-zinc-200 mb-4" />
+                      <p className="font-label-bold text-zinc-400">Nenhuma mesa aberta</p>
                     </div>
-
-                    <div className="flex-1 flex flex-col justify-center py-4 border-y border-slate-100 dark:border-slate-700/50 mb-4 bg-slate-50/50 dark:bg-slate-900/20 rounded-xl px-4 text-center">
-                      <span className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Total da Conta</span>
-                      <span className="text-3xl font-bold text-slate-800 dark:text-white">
-                        R$ {total.toFixed(2).replace('.', ',')}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <button
-                        onClick={() => setSelectedTableDetails(table)}
-                        className="w-full bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold py-2 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
-                      >
-                        <Receipt className="w-5 h-5" />
-                        Ver Detalhes
-                      </button>
-                      <button
-                        onClick={() => handleCloseTableClick(table)}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
-                      >
-                        <CheckCircle2 className="w-5 h-5" />
-                        Receber e Fechar Mesa
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )
-        ) : (
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Histórico de Pedidos Pagos</h2>
-              <div className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 font-bold px-4 py-2 rounded-xl border border-emerald-100 dark:border-emerald-800/50">
-                Total Recebido: R$ {totalClosedAmount.toFixed(2).replace('.', ',')}
-              </div>
-            </div>
-            
-            {closedOrders.length === 0 ? (
-              <div className="flex-1 flex flex-col justify-center items-center py-12 text-slate-400 dark:text-slate-500">
-                <Receipt className="w-12 h-12 mb-4 opacity-20" />
-                <span className="text-lg font-medium">Nenhum pedido pago (arquivado ou de hoje).</span>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-700">
-                      <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 text-sm">ID do Pedido</th>
-                      <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 text-sm">Mesa</th>
-                      <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 text-sm">Total</th>
-                      <th className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 text-sm">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {closedOrders.map((order, i) => (
-                      <tr key={order.id} className={i !== closedOrders.length - 1 ? 'border-b border-slate-100 dark:border-slate-800' : ''}>
-                        <td className="py-3 px-4 text-sm text-slate-900 dark:text-slate-300 font-medium">{order.id.slice(0, 8)}...</td>
-                        <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-400">
-                          {tables.find(t => t.id === order.table_id)?.number || 'N/A'}
-                        </td>
-                        <td className="py-3 px-4 text-sm font-bold text-slate-900 dark:text-white">
-                          R$ {order.total_amount.toFixed(2).replace('.', ',')}
-                        </td>
-                        <td className="py-3 px-4 text-sm">
-                          <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-1 rounded-md font-bold text-xs">
-                            Pago
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {selectedTableDetails && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex flex-col justify-center items-center p-4 sm:p-6 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-2xl shadow-xl flex flex-col max-h-full">
-            <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Receipt className="w-6 h-6 text-indigo-500" />
-                Detalhes da Mesa {selectedTableDetails.number}
-              </h2>
-              <button 
-                onClick={() => setSelectedTableDetails(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                title="Fechar"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto flex-1">
-              {(() => {
-                const tableOrders = getTableOrders(selectedTableDetails.id);
-                if (tableOrders.length === 0) {
-                  return (
-                    <div className="text-center py-12 text-slate-500 dark:text-slate-400">
-                      Nenhum pedido encontrado para esta mesa.
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="space-y-6">
-                    {tableOrders.map((order, index) => (
-                      <div key={order.id} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-                        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            Pedido #{index + 1} <span className="text-sm font-normal text-slate-500 ml-2">({order.id.slice(0, 6)})</span>
-                          </span>
-                          <span className={`px-2 py-1 rounded text-xs font-bold ${
-                            order.status === 'served' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                            'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                          }`}>
-                            {order.status === 'served' ? 'Entregue' : 'Em andamento'}
-                          </span>
-                        </div>
-                        <div className="p-4 bg-white dark:bg-slate-800">
-                          <ul className="space-y-3">
-                            {order.items?.map((item, i) => (
-                              <li key={i} className="flex justify-between items-start text-sm">
-                                <div className="flex gap-2">
-                                  <span className="font-medium text-slate-900 dark:text-slate-200">{item.quantity}x</span>
-                                  <div>
-                                    <span className="text-slate-700 dark:text-slate-300">{item.name}</span>
-                                    {item.notes && <p className="text-xs text-slate-500 dark:text-slate-400 italic mt-0.5">{item.notes}</p>}
-                                  </div>
-                                </div>
-                                <span className="font-medium text-slate-900 dark:text-slate-200">
-                                  R$ {(item.price * item.quantity).toFixed(2).replace('.', ',')}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center font-bold">
-                            <span className="text-slate-800 dark:text-slate-200">Subtotal</span>
-                            <span className="text-slate-900 dark:text-white">R$ {order.total_amount.toFixed(2).replace('.', ',')}</span>
+                  ) : (
+                    filteredTables.map((table) => {
+                      const tableOrders = getTableOrders(table.id);
+                      const tableTotal = tableOrders.reduce((sum, o) => sum + o.total_amount, 0);
+                      const isSelected = selectedTableId === table.id;
+                      
+                      return (
+                        <button 
+                          key={table.id}
+                          onClick={() => setSelectedTableId(table.id)}
+                          className={cx(
+                            "w-full text-left rounded-lg p-3 flex justify-between items-stretch transition-all group border",
+                            isSelected 
+                              ? "bg-[#ffdad7] border-[#bb001b] shadow-sm active:scale-[0.98]" 
+                              : "bg-white border-[#e7bcb9] hover:border-[#5f5e5e] hover:shadow-sm active:scale-[0.98]"
+                          )}
+                        >
+                          <div className="flex flex-col justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className={cx("font-h2", isSelected ? "text-[#410004]" : "text-[#1a1c1c]")}>
+                                {String(table.number).padStart(2, '0')}
+                              </span>
+                              <span className={cx("material-symbols-outlined text-sm", isSelected ? "text-[#bb001b]" : "text-[#5f5e5e]")}>
+                                {tableOrders.length > 2 ? 'groups' : 'person'}
+                              </span>
+                            </div>
+                            <div className={cx("font-label-bold text-[12px] mt-2 flex items-center gap-1", isSelected ? "text-[#bb001b]" : "text-[#5f5e5e]")}>
+                              {isSelected && <span className="w-2 h-2 rounded-full bg-[#bb001b] animate-pulse"></span>}
+                              {tableTotal > 0 ? 'Consumindo' : 'Ocupada'}
+                            </div>
                           </div>
+                          <div className="flex flex-col justify-between items-end text-right">
+                            <span className={cx("font-body-sm text-xs opacity-80", isSelected ? "text-[#930013]" : "text-[#5f5e5e]")}>
+                              {tableOrders.length} itens
+                            </span>
+                            <span className={cx("font-price mt-2", isSelected ? "text-[#bb001b]" : "text-[#1a1c1c]")}>
+                              R$ {tableTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
+
+              {/* Main: Detalhes da Mesa */}
+              <section className="flex-1 bg-white border border-[#e7bcb9] rounded-xl flex flex-col shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                {selectedTable ? (
+                  <>
+                    <div className="p-5 border-b border-[#e7bcb9] flex justify-between items-center bg-white rounded-t-xl shrink-0">
+                      <div>
+                        <div className="flex items-baseline gap-3">
+                          <h2 className="font-h1 text-[#1a1c1c]">Mesa {selectedTable.number}</h2>
+                          <span className="font-body-lg text-zinc-400">ID: {selectedTable.id.slice(0, 8)}</span>
+                        </div>
+                        <p className="font-body-sm text-[#5f5e5e] mt-1">Status: Ocupada • {selectedTableOrders.length} itens no total</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-5 hide-scrollbar">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-[#e7bcb9] text-[#5f5e5e] font-label-bold">
+                            <th className="pb-3 w-16 font-normal">Qtd</th>
+                            <th className="pb-3 font-normal">Item</th>
+                            <th className="pb-3 text-right font-normal">V. Unit</th>
+                            <th className="pb-3 text-right font-normal">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="font-body-md text-[#1a1c1c]">
+                          {selectedTableOrders.flatMap(order => order.items).length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="py-12 text-center text-zinc-400">
+                                Nenhum item lançado nesta mesa.
+                              </td>
+                            </tr>
+                          ) : (
+                            selectedTableOrders.flatMap((order) => 
+                              order.items.map((item) => (
+                                <tr key={item.cart_item_id} className="border-b border-zinc-100 hover:bg-[#f3f3f3] transition-colors group">
+                                  <td className="py-4 align-top">
+                                    <span className="bg-zinc-100 px-2 py-1 rounded font-label-bold text-xs">
+                                      {item.quantity}x
+                                    </span>
+                                  </td>
+                                  <td className="py-4">
+                                    <div className="font-label-bold">{item.name || 'Item sem nome'}</div>
+                                    {item.notes && (
+                                      <div className="font-body-sm text-xs text-[#5f5e5e] mt-1 italic">{item.notes}</div>
+                                    )}
+                                    {item.options && item.options.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {item.options.map(opt => (
+                                          <span key={opt.id} className="text-[10px] bg-zinc-50 text-zinc-500 px-1.5 py-0.5 rounded border border-zinc-100">
+                                            + {opt.name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="py-4 text-right text-[#5f5e5e]">
+                                    R$ {item.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="py-4 text-right font-label-bold">
+                                    R$ {(item.price * item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              ))
+                            )
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="p-5 bg-[#f3f3f3] border-t border-[#e7bcb9] rounded-b-xl shrink-0">
+                      <div className="space-y-2 mb-4">
+                        <div className="flex justify-between font-body-md text-[#5f5e5e]">
+                          <span>Subtotal Itens</span>
+                          <span>R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between font-body-md text-[#5f5e5e]">
+                          <span>Taxa de Serviço (10%)</span>
+                          <span>R$ {serviceCharge.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                         </div>
                       </div>
-                    ))}
+                      <div className="flex justify-between items-end pt-4 border-t border-[#e7bcb9]">
+                        <span className="font-h2 text-[#1a1c1c]">Total a Pagar</span>
+                        <span className="font-h1 text-[#bb001b]">R$ {totalToPay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
+                    <div className="w-20 h-20 bg-zinc-50 rounded-full flex items-center justify-center mb-6 border border-zinc-100">
+                      <span className="material-symbols-outlined text-4xl text-zinc-300">touch_app</span>
+                    </div>
+                    <h2 className="font-h2 text-[#1a1c1c]">Selecione uma Mesa</h2>
+                    <p className="font-body-md text-[#5f5e5e] mt-2 max-w-sm">
+                      Escolha uma mesa aberta ao lado para visualizar os itens e realizar o fechamento da conta.
+                    </p>
                   </div>
-                );
-              })()}
-            </div>
-            
-            <div className="p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0 flex flex-col sm:flex-row justify-between items-center gap-4">
-               <div className="text-center sm:text-left">
-                 <p className="text-sm text-slate-500 dark:text-slate-400">Total a Pagar</p>
-                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                   R$ {getTableTotal(getTableOrders(selectedTableDetails.id)).toFixed(2).replace('.', ',')}
-                 </p>
-               </div>
-               <div className="flex gap-3 w-full sm:w-auto mt-4 sm:mt-0">
-                 <button
-                   onClick={() => setSelectedTableDetails(null)}
-                   className="flex-1 sm:flex-none px-6 py-3 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                 >
-                   Voltar
-                 </button>
-                 <button
-                   onClick={() => {
-                     if (selectedTableDetails) {
-                       handleCloseTableClick(selectedTableDetails);
-                     }
-                   }}
-                   className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
-                 >
-                   <CheckCircle2 className="w-5 h-5" />
-                   Receber
-                 </button>
-               </div>
-            </div>
-          </div>
-        </div>
+                )}
+              </section>
+
+              {/* Sidebar: Pagamento */}
+              <section className="w-[320px] shrink-0 bg-white border border-[#e7bcb9] rounded-xl flex flex-col shadow-[0_4px_20px_rgba(0,0,0,0.02)] relative overflow-hidden">
+                <div className="p-5 border-b border-[#e7bcb9] bg-white rounded-t-xl shrink-0">
+                  <h2 className="font-h3 text-[#1a1c1c] flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[#bb001b]">payments</span>
+                    Pagamento
+                  </h2>
+                </div>
+                
+                <div className="p-5 flex-1 overflow-y-auto hide-scrollbar space-y-6">
+                  <div>
+                    <label className="font-label-bold text-[#5f5e5e] mb-3 block">Método de Pagamento</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button className="bg-[#ffdad7] border-2 border-[#bb001b] text-[#bb001b] rounded-xl p-4 flex flex-col items-center justify-center gap-2 active:scale-95 transition-all">
+                        <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>qr_code_scanner</span>
+                        <span className="font-label-bold">Pix</span>
+                      </button>
+                      <button className="bg-white border border-[#e7bcb9] text-[#1a1c1c] rounded-xl p-4 flex flex-col items-center justify-center gap-2 hover:border-[#5f5e5e] hover:bg-[#f3f3f3] active:scale-95 transition-all">
+                        <span className="material-symbols-outlined text-3xl">credit_card</span>
+                        <span className="font-label-bold">Cartão</span>
+                      </button>
+                      <button className="bg-white border border-[#e7bcb9] text-[#1a1c1c] rounded-xl p-4 flex flex-col items-center justify-center gap-2 hover:border-[#5f5e5e] hover:bg-[#f3f3f3] active:scale-95 transition-all col-span-2">
+                        <span className="material-symbols-outlined text-3xl">payments</span>
+                        <span className="font-label-bold">Dinheiro</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-[#f3f3f3] p-4 rounded-xl border border-[#e7bcb9]">
+                    <label className="font-label-bold text-[#5f5e5e] mb-2 block">Confirmar Valor</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-h2 text-[#1a1c1c]">R$</span>
+                      <input 
+                        className="w-full pl-12 pr-4 py-3 bg-white border border-[#e7bcb9] rounded-lg font-h2 text-right focus:outline-none focus:border-[#bb001b] transition-all" 
+                        type="text" 
+                        readOnly
+                        value={totalToPay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-5 bg-white border-t border-[#e7bcb9] shrink-0 z-10 shadow-[0_-8px_30px_rgba(0,0,0,0.05)]">
+                  <button 
+                    disabled={!selectedTable}
+                    onClick={() => setIsConfirmModalOpen(true)}
+                    className="w-full bg-[#bb001b] hover:bg-[#c0001c] disabled:bg-zinc-300 text-white font-h3 py-4 rounded-xl shadow-[0_8px_30px_rgba(234,29,44,0.15)] active:translate-y-1 transition-all flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                    Fechar Conta
+                  </button>
+                </div>
+              </section>
+            </motion.div>
+          ) : (
+            <motion.div 
+              key="view-closed"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex-1 bg-white border border-[#e7bcb9] rounded-xl flex flex-col shadow-[0_4px_20px_rgba(0,0,0,0.02)] overflow-hidden"
+            >
+              <div className="p-5 border-b border-[#e7bcb9] bg-[#f3f3f3] flex justify-between items-center shrink-0">
+                <h2 className="font-h3 text-[#1a1c1c]">Histórico de Recebimentos</h2>
+                <div className="font-price text-[#bb001b]">Total: R$ {totalClosedAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div className="flex-1 overflow-auto p-4">
+                <ClosedOrdersTable orders={closedOrders} tables={tables} totalClosedAmount={totalClosedAmount} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Modais e Feedback */}
+      {selectedTable && (
+        <CloseTableConfirmationModal
+          isOpen={isConfirmModalOpen}
+          onClose={() => setIsConfirmModalOpen(false)}
+          onConfirm={confirmCloseTable}
+          tableNumber={selectedTable.number}
+          hasPendingOrders={selectedTableOrders.some(o => !['delivered', 'served'].includes(o.status))}
+        />
       )}
 
-      {isConfirmModalOpen && confirmModalData && (
-        <div className="fixed inset-0 bg-slate-900/50 z-50 flex flex-col justify-center items-center p-6 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-3xl shadow-2xl p-6 text-center border-t-4 border-indigo-500">
-            <div className="mx-auto w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mb-4">
-              <Wallet className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-            </div>
-            
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-              Fechar Mesa {confirmModalData.table.number}
-            </h2>
-            
-            <p className="text-slate-600 dark:text-slate-400 mb-6">
-              {confirmModalData.hasPending ? 
-                `Atenção: Esta mesa possui pedidos em andamento (não entregues). Deseja realmente fechar a mesa e marcar todos como pagos?`
-                : `Confirmar o fechamento da conta da Mesa ${confirmModalData.table.number}?`}
-            </p>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => setIsConfirmModalOpen(false)}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold py-3 rounded-xl transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmCloseTable}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2"
-              >
-                <CheckCircle2 className="w-5 h-5" />
-                Confirmar
-              </button>
-            </div>
-          </div>
+      {feedback && (
+        <div
+          className={cx(
+            'fixed bottom-6 left-1/2 z-[70] flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-white shadow-2xl',
+            feedback.type === 'error' ? 'bg-red-600' : 'bg-zinc-950'
+          )}
+        >
+          {feedback.type === 'error' ? (
+            <AlertCircle className="h-5 w-5 shrink-0" />
+          ) : (
+            <Check className="h-5 w-5 shrink-0 text-green-400" />
+          )}
+          <span className="min-w-0 flex-1">{feedback.message}</span>
         </div>
       )}
-    </main>
+    </div>
   );
 }

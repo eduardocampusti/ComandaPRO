@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Comanda Pro - Carrinho</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Plus+Jakarta+Sans:ital,wght@0,700;0,800;1,900&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-dim": "#dadada",
+                    "inverse-primary": "#ffb3ad",
+                    "inverse-on-surface": "#f1f1f1",
+                    "on-tertiary": "#ffffff",
+                    "on-surface": "#1a1c1c",
+                    "primary-container": "#e6182a",
+                    "on-secondary-fixed-variant": "#474747",
+                    "tertiary": "#795600",
+                    "primary": "#bb001b",
+                    "on-tertiary-fixed": "#271900",
+                    "tertiary-fixed": "#ffdea8",
+                    "on-tertiary-container": "#fffbff",
+                    "on-surface-variant": "#5d3f3d",
+                    "surface-container-highest": "#e2e2e2",
+                    "on-secondary-container": "#656464",
+                    "surface-variant": "#e2e2e2",
+                    "on-error-container": "#93000a",
+                    "secondary-fixed-dim": "#c8c6c6",
+                    "surface-container-low": "#f3f3f3",
+                    "surface-container": "#eeeeee",
+                    "surface-container-high": "#e8e8e8",
+                    "outline": "#926e6b",
+                    "on-error": "#ffffff",
+                    "secondary": "#5f5e5e",
+                    "secondary-fixed": "#e4e2e1",
+                    "surface-bright": "#f9f9f9",
+                    "on-primary-fixed": "#410004",
+                    "on-primary-fixed-variant": "#930013",
+                    "on-secondary": "#ffffff",
+                    "primary-fixed-dim": "#ffb3ad",
+                    "error-container": "#ffdad6",
+                    "on-background": "#1a1c1c",
+                    "on-tertiary-fixed-variant": "#5e4200",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-fixed": "#1b1c1c",
+                    "error": "#ba1a1a",
+                    "secondary-container": "#e4e2e1",
+                    "surface": "#f9f9f9",
+                    "inverse-surface": "#2f3131",
+                    "on-primary-container": "#fffbff",
+                    "primary-fixed": "#ffdad7",
+                    "tertiary-fixed-dim": "#ffba20",
+                    "outline-variant": "#e7bcb9",
+                    "on-primary": "#ffffff",
+                    "tertiary-container": "#986d00",
+                    "surface-tint": "#c0001c",
+                    "background": "#f9f9f9"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "stack-lg": "32px",
+                    "unit": "4px",
+                    "section-gap": "48px",
+                    "stack-sm": "8px",
+                    "container-padding-mobile": "16px",
+                    "container-padding-desktop": "40px",
+                    "stack-md": "16px"
+            },
+            "fontFamily": {
+                    "body-lg": [
+                            "Inter"
+                    ],
+                    "h2": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "h3": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "h1": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "body-md": [
+                            "Inter"
+                    ],
+                    "label-bold": [
+                            "Inter"
+                    ],
+                    "body-sm": [
+                            "Inter"
+                    ],
+                    "price-display": [
+                            "Plus Jakarta Sans"
+                    ]
+            },
+            "fontSize": {
+                    "body-lg": [
+                            "18px",
+                            {
+                                    "lineHeight": "1.6",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "h2": [
+                            "24px",
+                            {
+                                    "lineHeight": "1.3",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "h3": [
+                            "20px",
+                            {
+                                    "lineHeight": "1.3",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "h1": [
+                            "32px",
+                            {
+                                    "lineHeight": "1.2",
+                                    "fontWeight": "800"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "1.5",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "label-bold": [
+                            "14px",
+                            {
+                                    "lineHeight": "1.0",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-sm": [
+                            "14px",
+                            {
+                                    "lineHeight": "1.4",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "price-display": [
+                            "20px",
+                            {
+                                    "lineHeight": "1.0",
+                                    "fontWeight": "700"
+                            }
+                    ]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen relative font-body-md text-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md text-red-600 dark:text-red-500 font-['Plus_Jakarta_Sans'] font-bold tracking-tight text-lg docked full-width top-0 sticky z-50 border-b border-zinc-100 dark:border-zinc-800 shadow-[0_4px_20px_rgba(0,0,0,0.05)] flex items-center justify-between px-4 py-3 w-full h-16">
+<button class="text-zinc-500 font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors active:scale-95 duration-150 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 1;">menu</span>
+</button>
+<span class="text-red-600 dark:text-red-500 font-black tracking-tighter italic text-xl">COMANDA PRO</span>
+<button class="text-zinc-500 font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors active:scale-95 duration-150 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined">search</span>
+</button>
+</header>
+<!-- Main Canvas -->
+<main class="pt-stack-md pb-[180px] px-container-padding-mobile flex flex-col gap-stack-lg max-w-2xl mx-auto w-full">
+<!-- Header -->
+<section>
+<h1 class="font-h1 text-h1 text-on-background mb-unit">Seu Pedido</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Revise os itens antes de enviar para a cozinha.</p>
+</section>
+<!-- Cart Items List -->
+<section class="flex flex-col gap-stack-md">
+<!-- Item 1 -->
+<article class="bg-surface-container-lowest p-stack-sm rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-surface-container flex gap-stack-md relative overflow-hidden">
+<div class="w-24 h-24 rounded-lg overflow-hidden shrink-0 bg-surface-container-low">
+<img alt="Smash Burger" class="w-full h-full object-cover" data-alt="A mouth-watering, high-resolution close-up of a double smash burger with melting bright orange cheese, crispy edges, and fresh lettuce in a soft brioche bun. The food is brightly lit against a clean, minimalist white background, emphasizing the Crave-First Corporate Modern aesthetic. High contrast, sharp details, energetic food photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDVHnznkirWluBCdEpaEgHrGadpr8TfPpicmF_jDfZET0VNtAuUdldu2qa0nsni37AkjQdsxHLD7ItYaBwJwW0D2jNXS4zhlMmHynzp2seDrveh3Nbi2wSpLtJ7Bwwebog4tie316FYA4KAVd23JyqsSy6_hzTjFk3XMtc78GaPsONOK1NWVkbRMphHtMEBmOJ-k223-ac-ljd9Fi96eyxA_Urj89oSRw9s64dyUQ4dP0kj6LK-5SCetWDZgsU9icSL4c07EsawJeA"/>
+</div>
+<div class="flex flex-col justify-between flex-grow py-1">
+<div>
+<h3 class="font-label-bold text-label-bold text-on-background mb-1">Double Smash Clássico</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-tight mb-2">Sem cebola, Ponto da carne: Ao ponto, Adicional de Bacon.</p>
+</div>
+<div class="flex items-center justify-between mt-auto">
+<div class="flex items-center bg-surface-container-low rounded-full border border-surface-container-high">
+<button aria-label="Diminuir quantidade" class="w-8 h-8 flex items-center justify-center text-primary active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">remove</span>
+</button>
+<span class="font-label-bold text-label-bold text-on-surface w-6 text-center">2</span>
+<button aria-label="Aumentar quantidade" class="w-8 h-8 flex items-center justify-center text-primary active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+</div>
+<span class="font-price-display text-price-display text-primary tracking-tight">R$ 78,00</span>
+</div>
+</div>
+<!-- Remove item indicator (swipe hint) -->
+<div class="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-surface-container-lowest to-transparent flex items-center justify-end pr-2 opacity-50 pointer-events-none">
+<span class="material-symbols-outlined text-outline-variant text-[16px]">chevron_left</span>
+</div>
+</article>
+<!-- Item 2 -->
+<article class="bg-surface-container-lowest p-stack-sm rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-surface-container flex gap-stack-md relative overflow-hidden">
+<div class="w-24 h-24 rounded-lg overflow-hidden shrink-0 bg-surface-container-low">
+<img alt="Batata Frita" class="w-full h-full object-cover" data-alt="A perfectly composed, high-angle shot of golden, crispy french fries served in a modern, minimalist matte white bowl. The fries are lightly dusted with coarse salt and herbs. Bright, clean studio lighting casts soft shadows, perfectly aligning with a premium, Crave-First Corporate Modern food app interface. Vibrant, appetizing colors." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCGFWTKP7EszO4oT4KpWIqSNXQd5tOCt4KMlNs7Uz85Z-hUvk6OyyKk5tOEIayTw0PngcBxNL_cgz_EhjRk4_UvfmMvo-O8dId3f5Oq85j3kkbN3S50jV1XZSRph9xbeLpYb8oN3kohVuvhZuumOsJ1OX9BxXMmUVr56tsf89XPygboqg9tjY89vuA7up_-BI_ZqSZCrIh1akzIfD6a1c_EX5FaVi2R4cjS5UYk1OpUMwsqedjw6K6XZZFeOyELmd9f258OF1eaznM"/>
+</div>
+<div class="flex flex-col justify-between flex-grow py-1">
+<div>
+<h3 class="font-label-bold text-label-bold text-on-background mb-1">Fritas Rústicas Média</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-tight mb-2">Acompanha maionese da casa.</p>
+</div>
+<div class="flex items-center justify-between mt-auto">
+<div class="flex items-center bg-surface-container-low rounded-full border border-surface-container-high">
+<button aria-label="Diminuir quantidade" class="w-8 h-8 flex items-center justify-center text-primary active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">remove</span>
+</button>
+<span class="font-label-bold text-label-bold text-on-surface w-6 text-center">1</span>
+<button aria-label="Aumentar quantidade" class="w-8 h-8 flex items-center justify-center text-primary active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+</div>
+<span class="font-price-display text-price-display text-primary tracking-tight">R$ 22,00</span>
+</div>
+</div>
+</article>
+<button class="w-full py-3 flex items-center justify-center gap-2 text-primary font-label-bold text-label-bold border-2 border-dashed border-outline-variant rounded-xl hover:bg-surface-container-low transition-colors active:scale-[0.98]">
+<span class="material-symbols-outlined text-[20px]">add_circle</span>
+                Adicionar mais itens
+            </button>
+</section>
+<!-- Table Information -->
+<section class="bg-surface-container-lowest rounded-xl p-stack-md border border-surface-container shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+<label class="block font-h3 text-h3 text-on-background mb-stack-sm flex items-center gap-2" for="table-number">
+<span class="material-symbols-outlined text-primary">table_restaurant</span>
+                Onde você está?
+            </label>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">Informe o número da sua mesa ou identificador.</p>
+<div class="relative">
+<input class="w-full bg-surface-bright border-2 border-surface-container-highest rounded-lg px-4 py-4 font-body-lg text-body-lg text-on-surface focus:border-primary focus:ring-0 transition-colors placeholder:text-outline outline-none" id="table-number" placeholder="Ex: Mesa 12 ou Balcão" type="text"/>
+</div>
+</section>
+<!-- Order Summary -->
+<section class="bg-surface-container-lowest rounded-xl p-stack-md border border-surface-container shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex flex-col gap-3">
+<div class="flex justify-between items-center">
+<span class="font-body-md text-body-md text-on-surface-variant">Subtotal</span>
+<span class="font-label-bold text-label-bold text-on-background">R$ 100,00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-md text-body-md text-on-surface-variant flex items-center gap-1">
+                    Taxa de Serviço (10%)
+                    <span class="material-symbols-outlined text-[14px] text-outline cursor-help">info</span>
+</span>
+<span class="font-label-bold text-label-bold text-on-background">R$ 10,00</span>
+</div>
+<div class="h-px bg-surface-container-highest w-full my-1"></div>
+<div class="flex justify-between items-end mt-1">
+<span class="font-h3 text-h3 text-on-background">Total</span>
+<span class="font-h1 text-h1 text-primary tracking-tight">R$ 110,00</span>
+</div>
+</section>
+</main>
+<!-- Sticky Checkout Action (Above BottomNavBar) -->
+<div class="fixed bottom-[88px] left-0 w-full px-container-padding-mobile z-40 bg-gradient-to-t from-background via-background to-transparent pt-8 pb-4">
+<div class="max-w-2xl mx-auto">
+<button class="w-full bg-primary text-on-primary font-h3 text-h3 py-5 rounded-xl shadow-[0_8px_30px_rgba(234,29,44,0.3)] hover:bg-surface-tint transition-all active:scale-[0.98] active:translate-y-1 flex items-center justify-center gap-3 tracking-wide">
+                ENVIAR PEDIDO
+                <span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 1;">send</span>
+</button>
+</div>
+</div>
+<!-- BottomNavBar -->
+<nav class="bg-zinc-900 dark:bg-black font-['Plus_Jakarta_Sans'] text-[11px] font-semibold docked full-width bottom-0 rounded-t-2xl none shadow-[0_-8px_30px_rgba(234,29,44,0.15)] fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pt-3 pb-6 md:hidden">
+<button class="flex flex-col items-center justify-center text-zinc-400 hover:text-white transition-all active:translate-y-1 duration-200 w-16 gap-1">
+<span class="material-symbols-outlined text-[24px]">restaurant_menu</span>
+<span>Menu</span>
+</button>
+<button class="flex flex-col items-center justify-center text-zinc-400 hover:text-white transition-all active:translate-y-1 duration-200 w-16 gap-1">
+<span class="material-symbols-outlined text-[24px]">receipt_long</span>
+<span>Orders</span>
+</button>
+<button class="flex flex-col items-center justify-center text-zinc-400 hover:text-white transition-all active:translate-y-1 duration-200 w-16 gap-1">
+<span class="material-symbols-outlined text-[24px]">person</span>
+<span>Profile</span>
+</button>
+<!-- Active Tab: Cart -->
+<button class="flex flex-col items-center justify-center text-red-500 scale-110 hover:text-white transition-all active:translate-y-1 duration-200 w-16 gap-1">
+<span class="material-symbols-outlined text-[24px]" data-weight="fill" style="font-variation-settings: 'FILL' 1;">shopping_bag</span>
+<span>Cart</span>
+</button>
+</nav>
+</body></html>

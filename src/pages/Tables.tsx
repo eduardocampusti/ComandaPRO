@@ -1,659 +1,654 @@
-import { useState, useEffect } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
-import { ArrowLeft, Plus, Trash2, Copy, Check, Calendar, Clock, X, RotateCcw, QrCode, AlertCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { FormEvent, useEffect, useMemo, useState, useRef } from 'react';
+import { 
+  Users, 
+  CheckCircle2, 
+  PlusCircle,
+  LayoutGrid,
+  Clock,
+  Calendar,
+  Receipt,
+  Trash2
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
-  fetchTables,
-  addTable as createTable,
-  updateTable,
-  deleteTable,
-  fetchReservations,
+  OrderData,
+  ReservationData,
+  TableData,
   addReservation as createReservation,
-  updateReservation as updateReservationInDb
+  addTable as createTable,
+  deleteTable,
+  fetchOrders,
+  fetchReservations,
+  fetchAllActiveReservations,
+  fetchTables,
+  updateReservation as updateReservationInDb,
+  deleteReservation as deleteReservationInDb,
+  updateTable,
+  checkExistingReservation,
 } from '../lib/database';
+import { cx, Card, Button } from '../components/ui/AppPrimitives';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { AlertDialog } from '../components/ui/AlertDialog';
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/Tabs';
+import { AnimatePresence } from 'motion/react';
+import { TableCard, TableStatus, TABLE_STATUS_STYLES } from '../components/tables/TableCard';
+import { QrCodeModal } from '../components/tables/QrCodeModal';
+import { ReservationModal } from '../components/tables/ReservationModal';
 
-interface TableData {
-  id: string;
-  number: number;
-  status: 'available' | 'occupied' | 'reserved';
-  capacity: number;
-  active?: boolean;
-  opened_at?: string;
-  current_session_id?: string | null;
+type TableFilter = 'all' | 'available' | 'occupied' | 'preparing' | 'payment' | 'reserved';
+type FeedbackType = 'success' | 'info' | 'error';
+
+interface TableViewModel {
+  table: TableData;
+  statusKey: TableStatus;
+  visualStatus: 'available' | 'occupied' | 'reserved';
+  statusLabel: string;
+  openOrders: OrderData[];
+  openTotal: number;
+  elapsed: string;
+  activeReservation?: ReservationData;
 }
 
-interface ReservationData {
-  id: string;
-  table_id: string;
-  customer_name: string;
-  date: string;
-  time: string;
-  guests: number;
-  status: 'scheduled' | 'seated' | 'cancelled';
+const openOrderStatuses = ['pending', 'preparing', 'ready', 'delivered', 'served'];
+
+
+
+function formatElapsed(openedAt?: string) {
+  if (!openedAt) return '0 min';
+
+  const opened = new Date(openedAt).getTime();
+  if (Number.isNaN(opened)) return '0 min';
+
+  const minutes = Math.max(0, Math.floor((Date.now() - opened) / 60000));
+  if (minutes < 1) return 'Agora';
+  if (minutes < 60) return `${minutes} min`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
+function getOrderUrl(tableId: string) {
+  if (!tableId || typeof tableId !== 'string' || tableId.trim() === '') {
+    return window.location.origin + window.location.pathname;
+  }
+  
+  const cleanTableId = encodeURIComponent(tableId.trim());
+  // Base segura: origin + pathname (ex: https://dominio.com/)
+  // Importante: HashRouter exige o # antes da rota
+  const origin = window.location.origin;
+  const pathname = window.location.pathname;
+  const base = pathname.endsWith('/') ? pathname : pathname + '/';
+  
+  return `${origin}${base}#/cardapio/${cleanTableId}`;
+}
+
+function getTableStatus(table: TableData, openOrders: OrderData[], activeReservation?: ReservationData) {
+  const hasPaymentOrder = openOrders.some((order) => ['delivered', 'served'].includes(order.status));
+  if (hasPaymentOrder) return 'payment';
+  
+  const hasKitchenOrder = openOrders.some((order) => ['pending', 'preparing', 'ready'].includes(order.status));
+  if (hasKitchenOrder) return 'preparing';
+  
+  if (table.status === 'occupied' || openOrders.length > 0) return 'occupied';
+  
+  if (activeReservation || table.status === 'reserved') return 'reserved';
+  
+  return 'available';
 }
 
 export default function Tables() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [tables, setTables] = useState<TableData[]>([]);
+  const [orders, setOrders] = useState<OrderData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
+  const [statusFilter, setStatusFilter] = useState<TableFilter>('all');
+  const [feedback, setFeedback] = useState<{ message: string; type: FeedbackType } | null>(null);
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   const [reservationError, setReservationError] = useState<string | null>(null);
   const [selectedTableForReservations, setSelectedTableForReservations] = useState<TableData | null>(null);
   const [qrCodeModalTable, setQrCodeModalTable] = useState<TableData | null>(null);
   const [reopenModalTable, setReopenModalTable] = useState<TableData | null>(null);
   const [reservations, setReservations] = useState<ReservationData[]>([]);
+  const [allReservations, setAllReservations] = useState<ReservationData[]>([]);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [isAddingTable, setIsAddingTable] = useState(false);
   const [newReservation, setNewReservation] = useState<Partial<ReservationData>>({
     customer_name: '',
     date: new Date().toISOString().split('T')[0],
     time: '19:00',
-    guests: 2
+    guests: 2,
   });
 
-  const handleCopyLink = (url: string, id: string) => {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
-    });
+  // Deletion states
+  const [reservationToDelete, setReservationToDelete] = useState<ReservationData | null>(null);
+  const [deleteReservationDialogOpen, setDeleteReservationDialogOpen] = useState(false);
+  const [isDeletingReservation, setIsDeletingReservation] = useState(false);
+
+  const [tableToDelete, setTableToDelete] = useState<TableData | null>(null);
+  const [deleteTableDialogOpen, setDeleteTableDialogOpen] = useState(false);
+  const [isDeletingTable, setIsDeletingTable] = useState(false);
+
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const showFeedback = (message: string, type: FeedbackType = 'success') => {
+    setFeedback({ message, type });
+    window.setTimeout(() => setFeedback(null), 3000);
   };
 
-  const loadTables = async () => {
+  const handleCopyLink = (url: string, id: string) => {
+    navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        setCopiedId(id);
+        showFeedback('Link copiado');
+        window.setTimeout(() => setCopiedId(null), 2000);
+      })
+      .catch(() => showFeedback('Erro ao copiar', 'error'));
+  };
+
+  const loadTables = async (showLoading = false) => {
     try {
-      const data = await fetchTables();
-      setTables(data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Erro ao buscar mesas:', error);
+      if (showLoading) setLoading(true);
+      const [tableData, activeReservations] = await Promise.all([
+        fetchTables(),
+        fetchAllActiveReservations()
+      ]);
+      setTables(tableData);
+      setAllReservations(activeReservations);
+      
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const orderData = await fetchOrders({ 
+          status: openOrderStatuses,
+          startDate: today.toISOString()
+        });
+        setOrders(orderData);
+      } catch (orderError) {
+        setOrders([]);
+      }
+    } catch (loadError) {
+      setError('Erro ao carregar mesas.');
+    } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadTables();
-    const interval = setInterval(loadTables, 3000);
-    return () => clearInterval(interval);
+    let isMounted = true;
+
+    const safeLoad = async (showLoading = false) => {
+      if (!isMounted) return;
+      await loadTables(showLoading);
+    };
+
+    safeLoad(true);
+
+    // Substitui polling por Realtime
+    const tablesSubscription = supabase
+      .channel('tables-main-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => {
+        safeLoad(false);
+      })
+      .subscribe();
+
+    const ordersSubscription = supabase
+      .channel('orders-main-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        safeLoad(false);
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(tablesSubscription);
+      supabase.removeChannel(ordersSubscription);
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setActiveMenuId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   useEffect(() => {
     if (!selectedTableForReservations) return;
-
     const loadReservations = async () => {
-      try {
-        const data = await fetchReservations(selectedTableForReservations.id);
-        data.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-        setReservations(data);
-      } catch (error) {
-        console.error('Erro ao buscar reservas:', error);
-      }
+      const data = await fetchReservations(selectedTableForReservations.id);
+      setReservations(data.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)));
     };
-
     loadReservations();
-    const interval = setInterval(loadReservations, 3000);
-    return () => clearInterval(interval);
   }, [selectedTableForReservations]);
+
+  const tableViews = useMemo<TableViewModel[]>(() => {
+    return tables.map((table) => {
+      const openOrders = orders.filter((order) => order.table_id === table.id && openOrderStatuses.includes(order.status));
+      const openTotal = openOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+      
+      // Encontrar reserva ativa para esta mesa hoje
+      const today = new Date().toISOString().split('T')[0];
+      const activeReservation = allReservations.find(res => 
+        res.table_id === table.id && 
+        res.date === today && 
+        res.status === 'scheduled'
+      );
+
+      const statusKey = getTableStatus(table, openOrders, activeReservation) as TableStatus;
+      
+      // Mapear sub-status (preparando/pagamento) para o tema principal (occupied)
+      const visualStatus = (statusKey === 'preparing' || statusKey === 'payment') ? 'occupied' : statusKey as 'available' | 'occupied' | 'reserved';
+      const config = TABLE_STATUS_STYLES[visualStatus];
+
+      return {
+        table,
+        statusKey,
+        visualStatus,
+        statusLabel: config.label,
+        openOrders,
+        openTotal,
+        elapsed: formatElapsed(table.opened_at),
+        activeReservation
+      };
+    });
+  }, [orders, tables, allReservations]);
+
+  const filteredTables = useMemo(() =>
+    statusFilter === 'all'
+      ? tableViews
+      : tableViews.filter((view) => view.statusKey === statusFilter),
+    [statusFilter, tableViews]
+  );
+
+  const counts = useMemo(() => {
+    return tableViews.reduce((acc, view) => {
+      acc.all += 1;
+      acc[view.statusKey] += 1;
+      return acc;
+    }, { all: 0, available: 0, occupied: 0, preparing: 0, payment: 0, reserved: 0 } as Record<TableFilter, number>);
+  }, [tableViews]);
 
   const updateTableStatus = async (tableId: string, status: TableData['status']) => {
     try {
-      if (status === 'occupied') {
-        await updateTable(tableId, {
-          status,
-          active: true,
-          opened_at: new Date().toISOString()
-        });
-      } else if (status === 'available') {
-        await updateTable(tableId, {
-          status,
-          active: false,
-          current_session_id: null,
-          opened_at: null
-        });
-      } else {
-        await updateTable(tableId, { status });
-      }
-    } catch (error) {
-      console.error('Erro ao atualizar status da mesa:', error);
+      await updateTable(tableId, {
+        status,
+        ...(status === 'occupied' ? { active: true, opened_at: new Date().toISOString() } : { active: false })
+      });
+      showFeedback('Status atualizado');
+      setActiveMenuId(null);
+      await loadTables(false);
+    } catch {
+      showFeedback('Erro ao atualizar', 'error');
     }
-  };
-
-  const reopenTable = (table: TableData) => {
-    setReopenModalTable(table);
   };
 
   const confirmReopenTable = async () => {
     if (!reopenModalTable) return;
-    try {
-      await updateTable(reopenModalTable.id, {
-        status: 'available',
-        current_session_id: null,
-        active: false,
-        opened_at: null
-      });
-      setReopenModalTable(null);
-    } catch (error) {
-      console.error('Erro ao reabrir mesa:', error);
-    }
+    await updateTable(reopenModalTable.id, {
+      status: 'available',
+      active: false,
+      opened_at: null
+    });
+    setReopenModalTable(null);
+    showFeedback('Mesa liberada');
+    loadTables(false);
   };
 
   const handleAddTable = async () => {
-    const nextNumber = tables.length > 0 ? Math.max(...tables.map(t => t.number)) + 1 : 1;
+    if (isAddingTable) return;
     try {
+      setIsAddingTable(true);
+      const nextNumber = tables.length > 0 ? Math.max(...tables.map((t) => t.number)) + 1 : 1;
       await createTable(nextNumber, 4);
-    } catch (error) {
-      console.error('Erro ao adicionar mesa:', error);
+      showFeedback('Mesa adicionada');
+      await loadTables(false);
+    } catch {
+      showFeedback('Erro ao adicionar mesa', 'error');
+    } finally {
+      setIsAddingTable(false);
     }
   };
 
-  const removeTable = async (id: string) => {
+  const removeTable = async (table: TableData) => {
+    setTableToDelete(table);
+    setDeleteTableDialogOpen(true);
+    setActiveMenuId(null);
+  };
+
+  const confirmDeleteTable = async () => {
+    if (!tableToDelete) return;
     try {
-      await deleteTable(id);
-    } catch (error) {
-      console.error('Erro ao remover mesa:', error);
+      setIsDeletingTable(true);
+      await deleteTable(tableToDelete.id);
+      showFeedback('Mesa removida');
+      setDeleteTableDialogOpen(false);
+      await loadTables(false);
+    } catch {
+      showFeedback('Erro ao remover mesa', 'error');
+    } finally {
+      setIsDeletingTable(false);
+      setTableToDelete(null);
     }
   };
 
   const openReservations = (table: TableData) => {
     setSelectedTableForReservations(table);
-    setNewReservation({
-      customer_name: '',
-      date: new Date().toISOString().split('T')[0],
-      time: '19:00',
-      guests: 2
-    });
-    setReservationError(null);
     setIsReservationModalOpen(true);
+    setActiveMenuId(null);
   };
 
-  const closeReservations = () => {
-    setIsReservationModalOpen(false);
-    setSelectedTableForReservations(null);
-    setReservations([]);
-    setReservationError(null);
-  };
-
-  const handleAddReservation = async (e: any) => {
+  const handleAddReservation = async (e: FormEvent) => {
     e.preventDefault();
-    if (!selectedTableForReservations || !newReservation.customer_name || !newReservation.date || !newReservation.time) return;
-
-    // Check for conflicts
-    const newDateTime = new Date(`${newReservation.date}T${newReservation.time}`);
-    const MIN_INTERVAL_HOURS = 2;
-
-    const conflictingRes = reservations.find(res => {
-      if (res.status === 'cancelled') return false;
-      const resDateTime = new Date(`${res.date}T${res.time}`);
-      const diffMs = Math.abs(resDateTime.getTime() - newDateTime.getTime());
-      const diffHours = diffMs / (1000 * 60 * 60);
-      return diffHours < MIN_INTERVAL_HOURS;
-    });
-
-    if (conflictingRes) {
-      const resDateTime = new Date(`${conflictingRes.date}T${conflictingRes.time}`);
-      const isBefore = resDateTime.getTime() < newDateTime.getTime();
-      const diffMs = Math.abs(resDateTime.getTime() - newDateTime.getTime());
-      const diffMinutes = Math.floor(diffMs / (1000 * 60));
-
-      setReservationError(
-        `🚨 Conflito de Horário!
-A mesa já possui reserva para "${conflictingRes.customer_name}" às ${conflictingRes.time}.
-Seu horário (${newReservation.time}) está apenas ${diffMinutes} minutos ${isBefore ? 'depois' : 'antes'} dessa reserva.
-Para garantir tempo de serviço e limpeza, o intervalo mínimo exigido é de 120 minutos (2 horas).`
-      );
-      return;
-    }
-
-    setReservationError(null);
-
+    if (!selectedTableForReservations) return;
+    
     try {
+      setReservationError(null);
+      
+      // Validar duplicidade
+      const exists = await checkExistingReservation(
+        selectedTableForReservations.id,
+        newReservation.date!,
+        newReservation.time!
+      );
+      
+      if (exists) {
+        setReservationError('Já existe uma reserva ativa para esta mesa neste horário.');
+        return;
+      }
+
       await createReservation({
+        ...newReservation as ReservationData,
         table_id: selectedTableForReservations.id,
-        customer_name: newReservation.customer_name,
-        date: newReservation.date,
-        time: newReservation.time,
-        guests: Number(newReservation.guests) || 2,
         status: 'scheduled'
       });
-      setNewReservation({
-        ...newReservation,
-        customer_name: '',
-        time: '19:00'
-      });
-    } catch (error) {
-      console.error('Erro ao adicionar reserva:', error);
-    }
-  };
-
-  const updateReservationStatus = async (resId: string, status: ReservationData['status']) => {
-    try {
-      await updateReservationInDb(resId, { status });
-    } catch (error) {
-      console.error('Erro ao atualizar status da reserva:', error);
-    }
-  };
-
-  const getOrderUrl = (tableId: string) => {
-    if (!tableId || typeof tableId !== 'string' || tableId.trim() === '') {
-      console.error('ID da mesa inválido ou ausente');
-      return window.location.origin;
-    }
-
-    const cleanTableId = encodeURIComponent(tableId.trim());
-
-    // Obter URL base
-    const envUrl = typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_PUBLIC_URL 
-      ? (import.meta as any).env.VITE_PUBLIC_URL 
-      : null;
       
-    let baseOrigin = window.location.origin;
-    let pathPrefix = window.location.pathname;
-
-    // Ajuste para o ambiente AI Studio
-    if (baseOrigin.includes('ais-dev-')) {
-      baseOrigin = baseOrigin.replace('ais-dev-', 'ais-pre-');
+      // Atualizar status da mesa para reserved
+      await updateTable(selectedTableForReservations.id, { status: 'reserved' });
+      
+      showFeedback('Reserva criada');
+      setIsReservationModalOpen(false);
+      await loadTables(false);
+      
+      // Reset form
+      setNewReservation({
+        customer_name: '',
+        date: new Date().toISOString().split('T')[0],
+        time: '19:00',
+        guests: 2,
+      });
+    } catch (err) {
+      setReservationError('Erro ao criar reserva');
     }
-
-    // Limpar o dirname (remover index.html ou parâmetros estranhos)
-    pathPrefix = pathPrefix.replace(/\/?[^\/]*\.html$/, '');
-
-    // Aplicar a env URL se houver
-    if (envUrl) {
-      if (envUrl.startsWith('http')) {
-        try {
-          const parsed = new URL(envUrl);
-          baseOrigin = parsed.origin;
-          pathPrefix = parsed.pathname;
-        } catch {
-          baseOrigin = envUrl;
-          pathPrefix = '';
-        }
-      } else {
-        pathPrefix = envUrl;
-      }
-    }
-
-    // Remover trailing slashes
-    baseOrigin = baseOrigin.replace(/\/+$/, '');
-    pathPrefix = pathPrefix === '/' ? '' : pathPrefix.replace(/\/+$/, '');
-
-    // Garantir que a URL funcione em cenários de roteamento # (que nossa flag HashRouter requer)
-    const isHashRouter = window.location.hash.startsWith('#') || true;
-    
-    if (isHashRouter) {
-      return `${baseOrigin}${pathPrefix}/#/order/${cleanTableId}`;
-    }
-    
-    return `${baseOrigin}${pathPrefix}/order/${cleanTableId}`;
   };
+
+  const handleDeleteReservation = (res: ReservationData) => {
+    setReservationToDelete(res);
+    setDeleteReservationDialogOpen(true);
+  };
+
+  const confirmDeleteReservation = async () => {
+    if (!reservationToDelete) return;
+    
+    try {
+      setIsDeletingReservation(true);
+      await deleteReservationInDb(reservationToDelete.id);
+      showFeedback('Reserva excluída');
+      
+      if (selectedTableForReservations) {
+        const remaining = await fetchReservations(selectedTableForReservations.id);
+        const activeRemaining = remaining.filter(r => r.status === 'scheduled');
+        setReservations(remaining);
+        
+        // Se não houver mais reservas ativas, voltar status da mesa para available (se não ocupada)
+        if (activeRemaining.length === 0) {
+          const openOrders = orders.filter(o => o.table_id === selectedTableForReservations.id && openOrderStatuses.includes(o.status));
+          if (openOrders.length === 0) {
+            await updateTable(selectedTableForReservations.id, { status: 'available' });
+          }
+        }
+      }
+      
+      setDeleteReservationDialogOpen(false);
+      await loadTables(false);
+    } catch {
+      showFeedback('Erro ao excluir reserva', 'error');
+    } finally {
+      setIsDeletingReservation(false);
+      setReservationToDelete(null);
+    }
+  };
+
+  const updateReservationStatus = async (id: string, status: ReservationData['status']) => {
+    try {
+      await updateReservationInDb(id, { status });
+      if (status === 'seated' && selectedTableForReservations) {
+        await updateTableStatus(selectedTableForReservations.id, 'occupied');
+      }
+      
+      if (selectedTableForReservations) {
+        const data = await fetchReservations(selectedTableForReservations.id);
+        setReservations(data);
+        
+        // Se cancelou, verificar se precisa voltar status da mesa
+        if (status === 'cancelled') {
+          const activeRemaining = data.filter(r => r.status === 'scheduled');
+          if (activeRemaining.length === 0) {
+            const openOrders = orders.filter(o => o.table_id === selectedTableForReservations.id && openOrderStatuses.includes(o.status));
+            if (openOrders.length === 0) {
+              await updateTable(selectedTableForReservations.id, { status: 'available' });
+            }
+          }
+        }
+      }
+      
+      await loadTables(false);
+    } catch {
+      showFeedback('Erro ao atualizar reserva', 'error');
+    }
+  };
+
+  const toggleMenu = (tableId: string) => setActiveMenuId(activeMenuId === tableId ? null : tableId);
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <Link to="/" className="p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-            <ArrowLeft className="w-5 h-5 dark:text-slate-300" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Gerenciar Mesas</h1>
-            <p className="text-slate-500 dark:text-slate-400">Gere QR Codes para autoatendimento</p>
-          </div>
+    <div className="flex-1 overflow-y-auto p-container-padding-mobile md:p-container-padding-desktop pb-32 md:pb-container-padding-desktop bg-slate-50/30 dark:bg-slate-950/30">
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Gestão de Mesas</h1>
+          <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">Acompanhe e gerencie o status das mesas em tempo real.</p>
         </div>
-        <button
+        <Button
           onClick={handleAddTable}
-          className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+          disabled={isAddingTable}
+          icon={PlusCircle}
+          size="lg"
+          className="shadow-lg shadow-primary-500/20"
         >
-          <Plus className="w-5 h-5" />
-          Nova Mesa
-        </button>
+          {isAddingTable ? 'Adicionando...' : 'Nova Mesa'}
+        </Button>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center p-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 dark:border-primary-400"></div>
-        </div>
-      ) : tables.length === 0 ? (
-        <div className="text-center p-12 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
-          <p className="text-slate-500 dark:text-slate-400 mb-4">Nenhuma mesa cadastrada.</p>
-          <button onClick={handleAddTable} className="text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
-            Adicionar primeira mesa
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {tables.map((table) => (
-              <div key={table.id} className={`p-6 rounded-2xl border-2 flex flex-col items-center text-center relative transition-all duration-300 ${
-              table.status === 'reserved' 
-                ? 'bg-gradient-to-b from-amber-50 to-amber-100/50 dark:from-amber-900/30 dark:to-slate-800 border-amber-500 ring-2 ring-amber-400 dark:ring-amber-500 ring-offset-2 dark:ring-offset-slate-900 shadow-xl shadow-amber-500/20 scale-[1.02] z-10' 
-                : table.status === 'occupied'
-                ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-500 shadow-md shadow-blue-500/10'
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm hover:border-slate-300 dark:hover:border-slate-600'
-            }`}>
-              {table.status === 'reserved' && (
-                <div className="absolute -top-5 -right-5 bg-gradient-to-br from-amber-400 to-amber-600 text-white px-4 py-3 rounded-2xl border-[4px] border-white dark:border-slate-900 shadow-2xl rotate-6 flex flex-col items-center justify-center animate-pulse">
-                  <Calendar className="w-8 h-8 mb-1 drop-shadow-md" />
-                  <span className="text-[11px] font-black uppercase tracking-widest drop-shadow-md">Agendada</span>
-                </div>
-              )}
-              {table.status === 'occupied' && (
-                <div className="absolute -top-3 -right-3 bg-blue-500 text-white p-2.5 rounded-full border-4 border-white dark:border-slate-900 shadow-md">
-                  <Clock className="w-5 h-5 relative z-10" />
-                </div>
-              )}
-              <div className="flex justify-between items-center w-full mb-4">
-                <h3 className={`text-xl font-bold ${
-                  table.status === 'reserved' ? 'text-amber-900 dark:text-amber-100' :
-                  table.status === 'occupied' ? 'text-blue-900 dark:text-blue-100' :
-                  'text-slate-900 dark:text-slate-100'
-                }`}>Mesa {table.number}</h3>
-                <select
-                  value={table.status || 'available'}
-                  onChange={(e) => updateTableStatus(table.id, e.target.value as TableData['status'])}
-                  className={`text-xs font-semibold px-2.5 py-1 rounded-md border-transparent focus:ring-0 cursor-pointer ${
-                    table.status === 'reserved' 
-                      ? 'bg-amber-200 text-amber-900 dark:bg-amber-500/20 dark:text-amber-300'
-                      : table.status === 'occupied'
-                      ? 'bg-blue-200 text-blue-900 dark:bg-blue-500/20 dark:text-blue-300'
-                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
-                  }`}
-                >
-                  <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value="available">Livre</option>
-                  <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value="occupied">Ocupada</option>
-                  <option className="bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value="reserved">Agendada</option>
-                </select>
-              </div>
-              
-              <button
-                onClick={() => setQrCodeModalTable(table)}
-                className={`w-full mb-4 py-3 flex justify-center items-center gap-2 rounded-xl text-sm font-semibold transition-colors shadow-sm ${
-                  table.status === 'reserved' ? 'bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-500/20 dark:hover:bg-amber-500/30 dark:text-amber-200' :
-                  table.status === 'occupied' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-200' :
-                  'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200'
-                }`}
-              >
-                <QrCode className="w-5 h-5" />
-                Mostrar QR Code
-              </button>
+      {/* Metrics Panel */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <Card className="bg-emerald-50 border border-emerald-200 shadow-sm p-5 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center text-emerald-600">
+            <CheckCircle2 className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-emerald-600 opacity-80">Disponíveis</p>
+            <p className="text-2xl font-black text-emerald-700">{counts.available}</p>
+          </div>
+        </Card>
 
-              {table.status === 'occupied' && (
-                <button
-                  onClick={() => reopenTable(table)}
-                  className="w-full mb-3 bg-blue-100 hover:bg-blue-200 text-blue-800 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-300 py-2 flex justify-center items-center gap-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Fechar Mesa
-                </button>
-              )}
+        <Card className="bg-red-50 border border-red-200 shadow-sm p-5 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center text-red-600">
+            <Users className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-red-600 opacity-80">Ocupadas</p>
+            <p className="text-2xl font-black text-red-600">{counts.occupied + counts.preparing + counts.payment}</p>
+          </div>
+        </Card>
 
-              <div className="flex w-full gap-2 mt-auto">
-                <button 
-                  onClick={() => openReservations(table)}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 py-2 flex justify-center items-center gap-1 rounded-lg text-sm font-medium transition-colors"
-                  title="Reservas"
-                >
-                  <Calendar className="w-4 h-4" />
-                  <span className="hidden xl:inline">Reservas</span>
-                </button>
-                <button 
-                  onClick={() => handleCopyLink(getOrderUrl(table.id), table.id)}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 py-2 flex justify-center items-center gap-1 rounded-lg text-sm font-medium transition-colors"
-                  title="Copiar Link"
-                >
-                  {copiedId === table.id ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                  <span className="hidden xl:inline">{copiedId === table.id ? 'Copiado!' : 'Copiar'}</span>
-                </button>
-                <button 
-                  onClick={() => window.open(getOrderUrl(table.id), '_blank')}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 py-2 flex justify-center items-center gap-1 rounded-lg text-sm font-medium transition-colors"
-                  title="Testar Link"
-                >
-                  Testar
-                </button>
-                <button 
-                  onClick={() => removeTable(table.id)}
-                  className="p-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/20 rounded-lg transition-colors border border-transparent"
-                  title="Remover Mesa"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
+        <Card className="bg-amber-50 border border-amber-200 shadow-sm p-5 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center text-amber-600">
+            <Calendar className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-amber-600 opacity-80">Reservadas</p>
+            <p className="text-2xl font-black text-amber-600">{counts.reserved}</p>
+          </div>
+        </Card>
+
+        <Card className="bg-white border border-slate-200 shadow-sm p-5 flex items-center gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-600">
+            <LayoutGrid className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-500">Total</p>
+            <p className="text-2xl font-black text-slate-900">{counts.all}</p>
+          </div>
+        </Card>
+      </div>
+
+      {/* Tabs / Filters */}
+      <div className="mb-8 overflow-hidden">
+        <Tabs value={statusFilter} onValueChange={(val) => setStatusFilter(val as TableFilter)}>
+          <TabsList className="bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm shadow-soft p-1.5 border-slate-200/60 dark:border-slate-800">
+            <TabsTrigger value="all" icon={LayoutGrid}>Todos</TabsTrigger>
+            <TabsTrigger value="available" icon={CheckCircle2}>Livre</TabsTrigger>
+            <TabsTrigger value="occupied" icon={Users}>Ocupada</TabsTrigger>
+            <TabsTrigger value="reserved" icon={Calendar}>Reservada</TabsTrigger>
+            <TabsTrigger value="preparing" icon={Clock}>Preparo</TabsTrigger>
+            <TabsTrigger value="payment" icon={Receipt}>Pagamento</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* Tables Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        <AnimatePresence mode="popLayout">
+          {filteredTables.map((view) => (
+            <TableCard
+              key={view.table.id}
+              {...view}
+              activeMenuId={activeMenuId}
+              onToggleMenu={toggleMenu}
+              onOpenQrCode={setQrCodeModalTable}
+              onOpenReservations={openReservations}
+              onReleaseTable={setReopenModalTable}
+              onRemoveTable={removeTable}
+              onUpdateReservationStatus={updateReservationStatus}
+            />
           ))}
+        </AnimatePresence>
+      </div>
+
+      {/* QrCode Modal */}
+      <QrCodeModal
+        table={qrCodeModalTable}
+        isOpen={!!qrCodeModalTable}
+        onClose={() => setQrCodeModalTable(null)}
+        onCopyLink={handleCopyLink}
+        getOrderUrl={getOrderUrl}
+      />
+
+      {/* Reservation Modal */}
+      <ReservationModal
+        table={selectedTableForReservations}
+        isOpen={isReservationModalOpen}
+        onClose={() => setIsReservationModalOpen(false)}
+        reservations={reservations}
+        newReservation={newReservation}
+        setNewReservation={setNewReservation}
+        onAddReservation={handleAddReservation}
+        onUpdateStatus={updateReservationStatus}
+        onDelete={handleDeleteReservation}
+        error={reservationError}
+      />
+
+      {/* Liberar Table Modal (AlertDialog) */}
+      <AlertDialog
+        isOpen={!!reopenModalTable}
+        onClose={() => setReopenModalTable(null)}
+        onConfirm={confirmReopenTable}
+        title="Liberar Mesa"
+        description={`Deseja realmente liberar a Mesa ${reopenModalTable?.number}? A sessão atual será encerrada.`}
+        confirmLabel="Liberar Mesa"
+        cancelLabel="Cancelar"
+      />
+
+      {/* Feedback Toast */}
+      {feedback && (
+        <div className={cx(
+          "fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] px-6 py-4 rounded-full shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4",
+          feedback.type === 'error' ? "bg-error text-on-error" : "bg-inverse-surface text-inverse-on-surface"
+        )}>
+          <span className="material-symbols-outlined">{feedback.type === 'error' ? 'error' : 'check_circle'}</span>
+          <span className="font-bold">{feedback.message}</span>
         </div>
       )}
 
-      {isReservationModalOpen && selectedTableForReservations && (
-        <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
-            <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                  Reservas - Mesa {selectedTableForReservations.number}
-                </h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Capacidade atual: {selectedTableForReservations.capacity} pessoas</p>
-              </div>
-              <button 
-                onClick={closeReservations}
-                className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto flex-1 flex flex-col md:flex-row gap-8">
-              <div className="flex-1 min-w-[280px]">
-                <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Nova Reserva</h3>
-                <form onSubmit={handleAddReservation} className="space-y-4">
-                  {reservationError && (
-                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-xl p-4 text-red-800 dark:text-red-400 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-2">
-                      <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                      <div className="whitespace-pre-wrap">{reservationError}</div>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do Cliente</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={newReservation.customer_name}
-                      onChange={e => setNewReservation({...newReservation, customer_name: e.target.value})}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      placeholder="Ex: João Silva"
-                    />
+      {/* Delete Reservation Alert */}
+      <AlertDialog
+        isOpen={deleteReservationDialogOpen}
+        onClose={() => !isDeletingReservation && setDeleteReservationDialogOpen(false)}
+        onConfirm={confirmDeleteReservation}
+        isLoading={isDeletingReservation}
+        title="Excluir reserva"
+        variant="danger"
+        confirmLabel="Excluir reserva"
+        cancelLabel="Cancelar"
+        description={
+          reservationToDelete && (
+            <div className="space-y-2">
+              <p>Tem certeza que deseja excluir esta reserva? Essa ação não poderá ser desfeita.</p>
+              <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl text-left border border-slate-100 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <Trash2 size={16} />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data</label>
-                      <input 
-                        type="date" 
-                        required
-                        value={newReservation.date}
-                        onChange={e => setNewReservation({...newReservation, date: e.target.value})}
-                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Horário</label>
-                      <input 
-                        type="time" 
-                        required
-                        value={newReservation.time}
-                        onChange={e => setNewReservation({...newReservation, time: e.target.value})}
-                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Qtd. de Pessoas</label>
-                    <input 
-                      type="number" 
-                      required
-                      min="1"
-                      value={newReservation.guests}
-                      onChange={e => setNewReservation({...newReservation, guests: parseInt(e.target.value)})}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
-                  <button 
-                    type="submit"
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-xl transition-colors"
-                  >
-                    Confirmar Reserva
-                  </button>
-                </form>
-              </div>
-              
-              <div className="flex-[1.5] border-t md:border-t-0 md:border-l border-slate-200 dark:border-slate-700 pt-6 md:pt-0 md:pl-8">
-                <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Agenda da Mesa</h3>
-                {reservations.length === 0 ? (
-                  <div className="text-center py-8 text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700">
-                    <Calendar className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                    <p>Nenhuma reserva para esta mesa.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {reservations.map(res => (
-                      <div key={res.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                        <div className="flex justify-between items-start mb-2">
-                          <h4 className="font-bold text-slate-900 dark:text-white tabular-nums">
-                            {new Date(res.date + 'T00:00:00').toLocaleDateString('pt-BR')} às {res.time}
-                          </h4>
-                          <span className={`text-xs font-semibold px-2 py-1 rounded-md ${
-                            res.status === 'scheduled' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
-                            res.status === 'seated' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                            'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                          }`}>
-                            {res.status === 'scheduled' ? 'Agendado' : res.status === 'seated' ? 'Ocupado' : 'Cancelado'}
-                          </span>
-                        </div>
-                        <p className="text-slate-700 dark:text-slate-300 font-medium">
-                          {res.customer_name} <span className="text-slate-500 dark:text-slate-400 font-normal">({res.guests} pessoas)</span>
-                        </p>
-                        
-                        <div className="mt-4 flex gap-2">
-                          {res.status === 'scheduled' && (
-                            <>
-                              <button 
-                                onClick={() => updateReservationStatus(res.id, 'seated')}
-                                className="flex-1 text-xs py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 rounded-lg font-medium transition-colors"
-                              >
-                                Marcar Ocupado
-                              </button>
-                              <button 
-                                onClick={() => updateReservationStatus(res.id, 'cancelled')}
-                                className="flex-1 text-xs py-1.5 bg-red-100 hover:bg-red-200 text-red-800 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 rounded-lg font-medium transition-colors"
-                              >
-                                Cancelar
-                              </button>
-                            </>
-                          )}
-                          {res.status === 'cancelled' && (
-                            <button 
-                                onClick={() => updateReservationStatus(res.id, 'scheduled')}
-                                className="flex-1 text-xs py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-800 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 rounded-lg font-medium transition-colors"
-                            >
-                              Reativar
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                  <p className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">{reservationToDelete.customer_name}</p>
+                </div>
+                <div className="space-y-1 pl-11">
+                  <p className="text-xs font-bold text-slate-500">
+                    📅 {new Date(reservationToDelete.date + 'T00:00:00').toLocaleDateString('pt-BR')} às {reservationToDelete.time}
+                  </p>
+                  <p className="text-xs font-bold text-slate-500">🪑 Mesa {selectedTableForReservations?.number}</p>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          )
+        }
+      />
 
-      {qrCodeModalTable && (
-        <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
-            <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                QR Code - Mesa {qrCodeModalTable.number}
-              </h2>
-              <button 
-                onClick={() => setQrCodeModalTable(null)}
-                className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
+      {/* Delete Table Alert */}
+      <AlertDialog
+        isOpen={deleteTableDialogOpen}
+        onClose={() => !isDeletingTable && setDeleteTableDialogOpen(false)}
+        onConfirm={confirmDeleteTable}
+        isLoading={isDeletingTable}
+        title="Remover mesa"
+        variant="danger"
+        confirmLabel="Remover mesa"
+        cancelLabel="Cancelar"
+        description={
+          tableToDelete && (
+            <div className="space-y-2">
+              <p>Deseja realmente remover a <strong>Mesa {tableToDelete.number}</strong>? Essa ação é permanente e removerá todos os dados vinculados.</p>
             </div>
-            <div className="p-8 flex flex-col items-center justify-center">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
-                <QRCodeSVG 
-                  value={getOrderUrl(qrCodeModalTable.id)} 
-                  size={200}
-                  level="H"
-                  includeMargin={false}
-                />
-              </div>
-              <p className="text-center text-sm text-slate-600 dark:text-slate-400 mb-2">
-                Escaneie o QR Code para acessar o cardápio desta mesa.
-              </p>
-              <p className="text-xs text-slate-400 break-all text-center px-4">
-                {getOrderUrl(qrCodeModalTable.id)}
-              </p>
-            </div>
-            <div className="p-4 border-t border-slate-200 dark:border-slate-700 mt-auto flex gap-3">
-              <button
-                onClick={() => handleCopyLink(getOrderUrl(qrCodeModalTable.id), qrCodeModalTable.id)}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
-              >
-                {copiedId === qrCodeModalTable.id ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                {copiedId === qrCodeModalTable.id ? 'Copiado!' : 'Copiar Link'}
-              </button>
-              <button
-                onClick={() => window.open(getOrderUrl(qrCodeModalTable.id), '_blank')}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-colors"
-              >
-                Testar Link
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {reopenModalTable && (
-        <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
-            <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                Reabrir Mesa {reopenModalTable.number}
-              </h2>
-              <button 
-                onClick={() => setReopenModalTable(null)}
-                className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="p-8 flex flex-col items-center justify-center text-center">
-              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-6">
-                <RotateCcw className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-              </div>
-              <p className="text-slate-700 dark:text-slate-300 font-medium mb-2">
-                Tem certeza que deseja reabrir esta mesa?
-              </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                A sessão atual será encerrada e o status voltará para livre.
-              </p>
-            </div>
-            <div className="p-4 border-t border-slate-200 dark:border-slate-700 mt-auto flex gap-3">
-              <button
-                onClick={() => setReopenModalTable(null)}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 py-3 px-4 rounded-xl font-medium transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmReopenTable}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-medium transition-colors"
-              >
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )
+        }
+      />
     </div>
   );
 }

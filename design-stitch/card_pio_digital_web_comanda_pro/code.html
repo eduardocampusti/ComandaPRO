@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>COMANDA PRO - Cardápio Digital</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-error": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "on-primary-fixed-variant": "#930013",
+                        "tertiary-fixed": "#ffdea8",
+                        "secondary-fixed": "#e4e2e1",
+                        "on-tertiary-fixed-variant": "#5e4200",
+                        "on-surface-variant": "#5d3f3d",
+                        "tertiary-fixed-dim": "#ffba20",
+                        "primary-container": "#e6182a",
+                        "inverse-surface": "#2f3131",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-fixed-dim": "#c8c6c6",
+                        "primary": "#bb001b",
+                        "outline": "#926e6b",
+                        "on-error-container": "#93000a",
+                        "on-secondary-container": "#656464",
+                        "inverse-primary": "#ffb3ad",
+                        "secondary": "#5f5e5e",
+                        "surface": "#f9f9f9",
+                        "background": "#f9f9f9",
+                        "on-primary": "#ffffff",
+                        "on-secondary-fixed-variant": "#474747",
+                        "inverse-on-surface": "#f1f1f1",
+                        "surface-dim": "#dadada",
+                        "surface-bright": "#f9f9f9",
+                        "secondary-container": "#e4e2e1",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e2e2e2",
+                        "primary-fixed-dim": "#ffb3ad",
+                        "on-tertiary-container": "#fffbff",
+                        "surface-container-highest": "#e2e2e2",
+                        "surface-container-high": "#e8e8e8",
+                        "surface-tint": "#c0001c",
+                        "tertiary-container": "#986d00",
+                        "outline-variant": "#e7bcb9",
+                        "error-container": "#ffdad6",
+                        "surface-container-low": "#f3f3f3",
+                        "tertiary": "#795600",
+                        "on-surface": "#1a1c1c",
+                        "primary-fixed": "#ffdad7",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "on-primary-container": "#fffbff",
+                        "on-primary-fixed": "#410004",
+                        "surface-container": "#eeeeee",
+                        "on-background": "#1a1c1c",
+                        "on-tertiary-fixed": "#271900",
+                        "on-tertiary": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "section-gap": "48px",
+                        "container-padding-mobile": "16px",
+                        "stack-md": "16px",
+                        "container-padding-desktop": "40px",
+                        "stack-lg": "32px",
+                        "unit": "4px",
+                        "stack-sm": "8px"
+                    },
+                    "fontFamily": {
+                        "price-display": ["Plus Jakarta Sans"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "h3": ["Plus Jakarta Sans"],
+                        "h1": ["Plus Jakarta Sans"],
+                        "label-bold": ["Inter"],
+                        "h2": ["Plus Jakarta Sans"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "price-display": ["20px", { "lineHeight": "1.0", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "h3": ["20px", { "lineHeight": "1.3", "fontWeight": "700" }],
+                        "h1": ["32px", { "lineHeight": "1.2", "fontWeight": "800" }],
+                        "label-bold": ["14px", { "lineHeight": "1.0", "fontWeight": "600" }],
+                        "h2": ["24px", { "lineHeight": "1.3", "fontWeight": "700" }],
+                        "body-sm": ["14px", { "lineHeight": "1.4", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+        
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #e2e2e2;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col overflow-hidden">
+<!-- TopAppBar -->
+<header class="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md docked full-width top-0 sticky z-50 border-b border-zinc-100 dark:border-zinc-800 shadow-[0_4px_20px_rgba(0,0,0,0.05)] flex items-center justify-between px-4 py-3 w-full h-16">
+<div class="flex items-center gap-4">
+<button class="text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors p-2 rounded-full active:scale-95 duration-150">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<span class="text-red-600 dark:text-red-500 font-black tracking-tighter italic text-xl">COMANDA PRO</span>
+</div>
+<!-- Search Bar in Header for Desktop -->
+<div class="hidden md:flex flex-1 max-w-xl mx-8 relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 text-body-sm text-on-surface focus:ring-2 focus:ring-primary-container outline-none transition-all" placeholder="Buscar no cardápio..." type="text"/>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-red-600 border-b-2 border-red-600 pb-1 font-['Plus_Jakarta_Sans'] font-bold tracking-tight text-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors active:scale-95 duration-150" href="#">Menu</a>
+<a class="text-zinc-500 font-medium font-['Plus_Jakarta_Sans'] tracking-tight text-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors active:scale-95 duration-150" href="#">Orders</a>
+<a class="text-zinc-500 font-medium font-['Plus_Jakarta_Sans'] tracking-tight text-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors active:scale-95 duration-150" href="#">Profile</a>
+</nav>
+<button class="md:hidden text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors p-2 rounded-full active:scale-95 duration-150">
+<span class="material-symbols-outlined">search</span>
+</button>
+</div>
+</header>
+<!-- Main Layout: Sidebar + Content + Cart -->
+<div class="flex flex-1 overflow-hidden h-[calc(100vh-64px)] max-w-[1440px] mx-auto w-full">
+<!-- Left Sidebar: Categories -->
+<aside class="hidden lg:flex flex-col w-64 border-r border-surface-variant bg-surface-container-lowest overflow-y-auto py-stack-lg px-container-padding-desktop">
+<h2 class="font-h2 text-h2 text-on-surface mb-stack-md">Categorias</h2>
+<nav class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary-container text-on-primary-container font-label-bold text-label-bold transition-colors" href="#">
+<span class="material-symbols-outlined filled">lunch_dining</span>
+                    Burgers Premium
+                </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:bg-surface-container-low font-label-bold text-label-bold transition-colors" href="#">
+<span class="material-symbols-outlined">local_pizza</span>
+                    Pizzas Artesanais
+                </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:bg-surface-container-low font-label-bold text-label-bold transition-colors" href="#">
+<span class="material-symbols-outlined">kebab_dining</span>
+                    Porções
+                </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:bg-surface-container-low font-label-bold text-label-bold transition-colors" href="#">
+<span class="material-symbols-outlined">local_bar</span>
+                    Bebidas
+                </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:bg-surface-container-low font-label-bold text-label-bold transition-colors" href="#">
+<span class="material-symbols-outlined">icecream</span>
+                    Sobremesas
+                </a>
+</nav>
+</aside>
+<!-- Center Content: Product Grid -->
+<main class="flex-1 overflow-y-auto bg-background p-container-padding-mobile md:p-container-padding-desktop pb-32 md:pb-container-padding-desktop">
+<!-- Mobile Category Scroll (Visible only on small screens) -->
+<div class="flex lg:hidden overflow-x-auto gap-3 pb-4 mb-6 no-scrollbar sticky top-0 bg-background z-10 py-2">
+<button class="px-5 py-2 rounded-full bg-primary-container text-on-primary-container font-label-bold text-label-bold whitespace-nowrap shadow-[0_4px_20px_rgba(230,24,42,0.15)]">Burgers</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant font-label-bold text-label-bold whitespace-nowrap">Pizzas</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant font-label-bold text-label-bold whitespace-nowrap">Porções</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant font-label-bold text-label-bold whitespace-nowrap">Bebidas</button>
+</div>
+<div class="mb-stack-lg">
+<h1 class="font-h1 text-h1 text-on-surface">Burgers Premium</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-unit">Carnes selecionadas, pães artesanais e muito sabor.</p>
+</div>
+<!-- Bento Grid / Asymmetric Layout for Products -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-stack-md">
+<!-- Featured Item (Takes 2 columns on larger screens) -->
+<div class="md:col-span-2 xl:col-span-2 bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-variant group flex flex-col md:flex-row hover:shadow-[0_8px_30px_rgba(230,24,42,0.1)] transition-all duration-300">
+<div class="h-64 md:h-auto md:w-1/2 relative overflow-hidden bg-surface-container-low">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A highly detailed, professional food photography shot of a massive, gourmet double cheeseburger. The burger is stacked high with two thick, juicy beef patties, melting bright yellow cheddar cheese, crispy bacon strips, fresh green lettuce, and red tomato slices inside a shiny, toasted brioche bun. The setting is a clean, modern studio environment with soft, high-key white lighting that enhances the appetizing colors. The background is a sleek, neutral light gray, keeping the focus entirely on the rich, saturated warm tones of the food. The aesthetic is premium, crave-inducing, and aligns perfectly with a modern, high-end fast-food digital menu." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDhPr2zNMPsDnx6u_SW2cL5xI7DiFxgJA2UmV6vs7sZXmjgkt4xMo9OIuPlvIDIWCCT03pjgbbSWqFpIF1IAtCt_R7KoYoagHFZ_Pn-e6_XiePb9QBwYi5-Ua3kl8yxIClrSQw34VtXtgvRGPOjvarTtp0bp8-DvPbGma720Us42CN3GaxraqcWPUIhe-fOlnTEKII7pMzs8umb9dUPNm6a1gUM5UAd-XFTQOBFg8qF03OU8R59_ttNAyO0bhm8i_K_ICy6lUFtJn4"/>
+<div class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 rounded-full font-label-bold text-label-bold text-xs uppercase tracking-wider">Mais Vendido</div>
+</div>
+<div class="p-6 md:w-1/2 flex flex-col justify-between">
+<div>
+<h3 class="font-h3 text-h3 text-on-surface mb-2">Comanda Master Double</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-3 mb-4">Dois blends de 180g de costela angus, duplo queijo cheddar derretido, bacon artesanal crocante, cebola caramelizada e nosso molho secreto no pão brioche amanteigado.</p>
+</div>
+<div class="flex items-end justify-between mt-4">
+<span class="font-price-display text-price-display text-on-surface">R$ 48,90</span>
+<button class="bg-primary-container text-on-primary-container p-3 rounded-full hover:bg-primary transition-colors flex items-center justify-center shadow-[0_4px_20px_rgba(230,24,42,0.2)]">
+<span class="material-symbols-outlined filled">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Standard Card -->
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-variant group flex flex-col hover:shadow-[0_8px_30px_rgba(230,24,42,0.1)] transition-all duration-300">
+<div class="h-48 relative overflow-hidden bg-surface-container-low">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A close-up, premium studio shot of a classic single cheeseburger. The burger features a perfectly seared, thick beef patty topped with a slice of melting cheddar cheese, fresh crinkle-cut pickles, and white onions, all housed within a soft, lightly toasted sesame seed bun. The lighting is bright and soft, creating a clean, appetizing light-mode aesthetic. The background is a stark, high-contrast white, allowing the rich reds, yellows, and browns of the burger to pop energetically. The overall mood is fast, fresh, and irresistibly craveable, perfectly suited for a high-velocity digital ordering platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1ecjzjc7Wk5jD03puXVTEWUK7ykl3wdQq0UXRe8kPh_zsj996DnD9zrpOJOa0hKrSyUWNF-uPEYk62yAYedvlX2CnUUuQPF0mxL1dNfsXTqm1J59NTCp4M-ofP7XWuUgiP8OVcyUsWUU37cU3NMbiwrKQg7flIRojj-v58-Td-kmznMqT-7mA3sJJuQBivtCIws9ixo2kwYyaNBpcaVmYjEDLzWFRLt468E_FLHNki3egNi77pmSj9a6yoj5DuiE-cfi3IvOl6tU"/>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between">
+<div>
+<h3 class="font-h3 text-h3 text-on-surface mb-2 text-lg">Classic Classic</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2">Blend de 160g, queijo prato, alface americana, tomate e maionese da casa.</p>
+</div>
+<div class="flex items-end justify-between mt-4">
+<span class="font-price-display text-price-display text-on-surface text-[18px]">R$ 32,90</span>
+<button class="bg-surface-container-high text-on-surface p-2 rounded-full hover:bg-primary-container hover:text-on-primary-container transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Standard Card -->
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-variant group flex flex-col hover:shadow-[0_8px_30px_rgba(230,24,42,0.1)] transition-all duration-300">
+<div class="h-48 relative overflow-hidden bg-surface-container-low">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A vivid, professional food photograph of a spicy jalapeño smash burger. The image displays two thin, crispy-edged smashed beef patties layered with spicy pepper jack cheese, bright green jalapeño slices, and a vibrant red hot sauce, served on a dark, charred potato bun. The setting utilizes a crisp, modern studio lighting setup that emphasizes the textures of the meat and the glossy sauce. The background is a pristine, clinical white, ensuring the high-energy colors of the spicy ingredients stand out sharply. The vibe is aggressive, modern, and highly appetizing for a fast-casual dining interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAT3PkSybhzNGgfhZaZ4X__-siAZeSZS_9gI4HxN6hCC2-Hrc0JKAha3wPBdVv5Pw_cVAADKqDQBQ61ESIEMRFGtgT0bCo6S3HUX9zpamytnQuy_8aK0ICad7bGWcfiGYLj_gQ6KZJuZSlwcl-zN4BXrX9G6Is7Bhq5-N_qWxWRG9nsIN52C3OVHyzJcPaoxwZvoLs8uDrK-fntx5Cj7i0X8YYEc_nMTfyw1RMRdOFlr5nKvqQFGHV5hZ8LK-KLR2ulQ6-UXDeeojo"/>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between">
+<div>
+<h3 class="font-h3 text-h3 text-on-surface mb-2 text-lg">Smash Picante</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2">Dois smash burgers de 80g, queijo pepper jack, jalapeños frescos e spicy mayo.</p>
+</div>
+<div class="flex items-end justify-between mt-4">
+<span class="font-price-display text-price-display text-on-surface text-[18px]">R$ 36,90</span>
+<button class="bg-surface-container-high text-on-surface p-2 rounded-full hover:bg-primary-container hover:text-on-primary-container transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Horizontal List Card (Takes full width of its container) -->
+<div class="xl:col-span-3 bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-surface-variant group flex flex-row items-center p-4 hover:shadow-[0_8px_30px_rgba(230,24,42,0.1)] transition-all duration-300">
+<div class="h-24 w-24 md:h-32 md:w-32 flex-shrink-0 relative overflow-hidden rounded-lg bg-surface-container-low">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A clean, appetizing macro shot of a side order of golden, crispy french fries served in a minimalist white paper cone. The fries are perfectly cooked, with visible flakes of sea salt catching the bright, high-key studio lighting. The background is a seamless, soft off-white surface, providing a stark contrast that highlights the warm, golden-yellow tones of the potatoes. The visual style is highly polished, corporate modern, and designed to look irresistibly crunchy and hot, acting as a perfect side-dish visual for a premium digital menu application." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRJCZuoiihq9EgLnYOYzpdt66pOcLP8t9gxDNAi3b9V_MRgW8JZeGPn9YjTAgahQYEc-eXZOkMk9pxryIVoNH7Jkzwxs7RBPZoyuEPwGXl2B4gKU51ed9HmxV72AFW2Cq1odWttpjr8IF9Lthxb0FAwtFWZtqnaLZP_3iM0sqpDB85qosvjHFcNkyCOjutamudLe11ak5h664qGgD4uydddFDETEtxjU-1PlC_9jZQ-l5E8hETUjoros4z1juncK9d1XTt8Xfb_3E"/>
+</div>
+<div class="ml-4 flex-1 flex flex-col justify-between h-full">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-h3 text-h3 text-on-surface mb-1 text-base md:text-lg">Fritas Rústicas Trudfadas</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-1 md:line-clamp-2">Porção de batatas rústicas com azeite de trufas brancas e parmesão ralado.</p>
+</div>
+</div>
+<div class="flex items-center justify-between mt-2 md:mt-4">
+<span class="font-price-display text-price-display text-on-surface text-[18px]">R$ 24,90</span>
+<button class="bg-surface-container-high text-on-surface px-4 py-2 rounded-full hover:bg-primary-container hover:text-on-primary-container transition-colors flex items-center justify-center font-label-bold text-label-bold text-sm gap-2">
+<span class="material-symbols-outlined text-[18px]">add</span> Adicionar
+                            </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Right Sidebar: Fixed Cart (Desktop) -->
+<aside class="hidden md:flex flex-col w-80 lg:w-96 border-l border-surface-variant bg-surface-container-lowest shadow-[0_-8px_30px_rgba(0,0,0,0.05)] z-20">
+<!-- Cart Header -->
+<div class="p-4 border-b border-surface-variant bg-surface-container-lowest flex items-center justify-between sticky top-0">
+<h2 class="font-h2 text-h2 text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined">shopping_bag</span>
+                    Seu Pedido
+                </h2>
+<span class="bg-primary-container text-on-primary-container px-2 py-1 rounded-full font-label-bold text-[12px]">2 itens</span>
+</div>
+<!-- Cart Items Scrollable Area -->
+<div class="flex-1 overflow-y-auto p-4 flex flex-col gap-4 bg-background">
+<!-- Cart Item 1 -->
+<div class="bg-surface-container-lowest p-3 rounded-lg border border-surface-variant shadow-sm flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<h4 class="font-label-bold text-label-bold text-on-surface">Comanda Master Double</h4>
+<span class="font-price-display text-on-surface text-base">R$ 48,90</span>
+</div>
+<p class="font-body-sm text-[12px] text-on-surface-variant leading-tight">Sem cebola, Adicional de Bacon</p>
+<div class="flex justify-between items-center mt-1">
+<div class="flex items-center bg-surface-container rounded-full p-1 gap-3">
+<button class="text-on-surface-variant hover:text-primary w-6 h-6 flex items-center justify-center rounded-full bg-surface-container-lowest shadow-sm">
+<span class="material-symbols-outlined text-[16px]">remove</span>
+</button>
+<span class="font-label-bold text-label-bold text-on-surface w-4 text-center">1</span>
+<button class="text-on-surface-variant hover:text-primary w-6 h-6 flex items-center justify-center rounded-full bg-surface-container-lowest shadow-sm">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+<button class="text-error hover:bg-error-container p-1 rounded-full transition-colors">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Cart Item 2 -->
+<div class="bg-surface-container-lowest p-3 rounded-lg border border-surface-variant shadow-sm flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<h4 class="font-label-bold text-label-bold text-on-surface">Fritas Rústicas Trufadas</h4>
+<span class="font-price-display text-on-surface text-base">R$ 24,90</span>
+</div>
+<div class="flex justify-between items-center mt-1">
+<div class="flex items-center bg-surface-container rounded-full p-1 gap-3">
+<button class="text-on-surface-variant hover:text-primary w-6 h-6 flex items-center justify-center rounded-full bg-surface-container-lowest shadow-sm">
+<span class="material-symbols-outlined text-[16px]">remove</span>
+</button>
+<span class="font-label-bold text-label-bold text-on-surface w-4 text-center">1</span>
+<button class="text-on-surface-variant hover:text-primary w-6 h-6 flex items-center justify-center rounded-full bg-surface-container-lowest shadow-sm">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+<button class="text-error hover:bg-error-container p-1 rounded-full transition-colors">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Cart Footer / Checkout -->
+<div class="p-4 bg-surface-container-lowest border-t border-surface-variant flex flex-col gap-4 sticky bottom-0">
+<div class="flex justify-between items-center text-on-surface-variant font-body-sm text-body-sm">
+<span>Subtotal</span>
+<span>R$ 73,80</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant font-body-sm text-body-sm">
+<span>Taxa de Entrega</span>
+<span class="text-green-600 font-medium">Grátis</span>
+</div>
+<div class="flex justify-between items-center border-t border-surface-variant pt-3">
+<span class="font-h3 text-h3 text-on-surface">Total</span>
+<span class="font-price-display text-[24px] text-on-surface font-bold">R$ 73,80</span>
+</div>
+<button class="w-full bg-primary-container text-on-primary-container font-h3 text-[18px] py-4 rounded-xl hover:bg-primary transition-colors shadow-[0_4px_20px_rgba(230,24,42,0.2)] flex items-center justify-center gap-2 active:scale-95 duration-150">
+                    Finalizar Pedido
+                    <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</aside>
+</div>
+<!-- Mobile Sticky Cart Bar (Visible only on mobile) -->
+<div class="md:hidden fixed bottom-[88px] left-4 right-4 bg-inverse-surface text-on-primary p-4 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.3)] flex justify-between items-center z-40">
+<div class="flex flex-col">
+<span class="font-body-sm text-[12px] text-surface-variant opacity-80">2 itens</span>
+<span class="font-price-display text-price-display">R$ 73,80</span>
+</div>
+<button class="bg-primary-container text-on-primary-container px-6 py-2 rounded-full font-label-bold text-label-bold flex items-center gap-2">
+            Ver Carrinho
+            <span class="material-symbols-outlined text-[18px]">shopping_bag</span>
+</button>
+</div>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden bg-zinc-900 dark:bg-black font-['Plus_Jakarta_Sans'] text-[11px] font-semibold docked full-width bottom-0 rounded-t-2xl shadow-[0_-8px_30px_rgba(234,29,44,0.15)] fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pt-3 pb-6">
+<a class="flex flex-col items-center justify-center text-red-500 scale-110 active:translate-y-1 duration-200" href="#">
+<span class="material-symbols-outlined filled mb-1">restaurant_menu</span>
+            Menu
+        </a>
+<a class="flex flex-col items-center justify-center text-zinc-400 hover:text-white transition-all active:translate-y-1 duration-200" href="#">
+<span class="material-symbols-outlined mb-1">receipt_long</span>
+            Orders
+        </a>
+<a class="flex flex-col items-center justify-center text-zinc-400 hover:text-white transition-all active:translate-y-1 duration-200" href="#">
+<span class="material-symbols-outlined mb-1">person</span>
+            Profile
+        </a>
+<a class="flex flex-col items-center justify-center text-zinc-400 hover:text-white transition-all active:translate-y-1 duration-200 relative" href="#">
+<span class="material-symbols-outlined mb-1">shopping_bag</span>
+            Cart
+            <span class="absolute top-0 right-1 bg-red-500 w-2 h-2 rounded-full"></span>
+</a>
+</nav>
+</body></html>

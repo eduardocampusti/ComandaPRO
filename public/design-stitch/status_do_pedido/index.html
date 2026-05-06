@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Comanda Pro - Confirmação</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..800&amp;family=Inter:wght@400..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#dadada",
+                        "inverse-primary": "#ffb3ad",
+                        "inverse-on-surface": "#f1f1f1",
+                        "on-tertiary": "#ffffff",
+                        "on-surface": "#1a1c1c",
+                        "primary-container": "#e6182a",
+                        "on-secondary-fixed-variant": "#474747",
+                        "tertiary": "#795600",
+                        "primary": "#bb001b",
+                        "on-tertiary-fixed": "#271900",
+                        "tertiary-fixed": "#ffdea8",
+                        "on-tertiary-container": "#fffbff",
+                        "on-surface-variant": "#5d3f3d",
+                        "surface-container-highest": "#e2e2e2",
+                        "on-secondary-container": "#656464",
+                        "surface-variant": "#e2e2e2",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed-dim": "#c8c6c6",
+                        "surface-container-low": "#f3f3f3",
+                        "surface-container": "#eeeeee",
+                        "surface-container-high": "#e8e8e8",
+                        "outline": "#926e6b",
+                        "on-error": "#ffffff",
+                        "secondary": "#5f5e5e",
+                        "secondary-fixed": "#e4e2e1",
+                        "surface-bright": "#f9f9f9",
+                        "on-primary-fixed": "#410004",
+                        "on-primary-fixed-variant": "#930013",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed-dim": "#ffb3ad",
+                        "error-container": "#ffdad6",
+                        "on-background": "#1a1c1c",
+                        "on-tertiary-fixed-variant": "#5e4200",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "error": "#ba1a1a",
+                        "secondary-container": "#e4e2e1",
+                        "surface": "#f9f9f9",
+                        "inverse-surface": "#2f3131",
+                        "on-primary-container": "#fffbff",
+                        "primary-fixed": "#ffdad7",
+                        "tertiary-fixed-dim": "#ffba20",
+                        "outline-variant": "#e7bcb9",
+                        "on-primary": "#ffffff",
+                        "tertiary-container": "#986d00",
+                        "surface-tint": "#c0001c",
+                        "background": "#f9f9f9"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-lg": "32px",
+                        "unit": "4px",
+                        "section-gap": "48px",
+                        "stack-sm": "8px",
+                        "container-padding-mobile": "16px",
+                        "container-padding-desktop": "40px",
+                        "stack-md": "16px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Inter"],
+                        "h2": ["Plus Jakarta Sans"],
+                        "h3": ["Plus Jakarta Sans"],
+                        "h1": ["Plus Jakarta Sans"],
+                        "body-md": ["Inter"],
+                        "label-bold": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "price-display": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "h2": ["24px", {"lineHeight": "1.3", "fontWeight": "700"}],
+                        "h3": ["20px", {"lineHeight": "1.3", "fontWeight": "700"}],
+                        "h1": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "label-bold": ["14px", {"lineHeight": "1.0", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "price-display": ["20px", {"lineHeight": "1.0", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background antialiased min-h-screen flex flex-col items-center justify-center p-container-padding-mobile md:p-container-padding-desktop">
+<!-- TopAppBar (Suppressed per logic: Transactional/Success screen implies departure from main nav flow) -->
+<!-- Main Content Canvas -->
+<main class="w-full max-w-lg bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.05)] p-stack-lg flex flex-col items-center text-center">
+<!-- Success Icon -->
+<div class="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mb-stack-md shadow-[0_8px_30px_rgba(34,197,94,0.15)]">
+<span class="material-symbols-outlined text-green-500" style="font-size: 48px; font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<!-- Headline -->
+<h1 class="font-h1 text-h1 text-on-background mb-unit">Pedido enviado para a cozinha!</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mb-stack-lg">Seu pedido foi recebido com sucesso e já estamos cuidando dele.</p>
+<!-- Estimated Time Badge -->
+<div class="inline-flex items-center space-x-2 bg-surface-container-low px-4 py-3 rounded-full mb-stack-lg border border-surface-variant">
+<span class="material-symbols-outlined text-on-secondary-container" style="font-variation-settings: 'FILL' 0;">schedule</span>
+<span class="font-label-bold text-label-bold text-on-background">Tempo estimado: 15-20 min</span>
+</div>
+<!-- Status Timeline -->
+<div class="w-full max-w-sm mb-stack-lg">
+<div class="relative flex flex-col space-y-6">
+<!-- Line Connecting Steps -->
+<div class="absolute left-6 top-6 bottom-6 w-0.5 bg-surface-container-high z-0"></div>
+<!-- Step 1: Received (Active) -->
+<div class="flex items-center relative z-10">
+<div class="w-12 h-12 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_4px_10px_rgba(187,0,27,0.3)] shrink-0">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">receipt</span>
+</div>
+<div class="ml-4 text-left">
+<h3 class="font-label-bold text-label-bold text-on-background">Pedido Recebido</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Agora mesmo</p>
+</div>
+</div>
+<!-- Step 2: Preparing (Pending) -->
+<div class="flex items-center relative z-10">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest text-on-secondary-container flex items-center justify-center shrink-0 border-2 border-surface-container-highest">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">outdoor_grill</span>
+</div>
+<div class="ml-4 text-left">
+<h3 class="font-label-bold text-label-bold text-on-secondary-container">Em Preparo</h3>
+</div>
+</div>
+<!-- Step 3: On the way (Pending) -->
+<div class="flex items-center relative z-10">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest text-on-secondary-container flex items-center justify-center shrink-0 border-2 border-surface-container-highest">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">room_service</span>
+</div>
+<div class="ml-4 text-left">
+<h3 class="font-label-bold text-label-bold text-on-secondary-container">A caminho da mesa</h3>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Button -->
+<button class="w-full bg-primary text-on-primary font-label-bold text-label-bold py-4 rounded-full shadow-[0_8px_30px_rgba(234,29,44,0.15)] hover:bg-primary-container transition-colors duration-200">
+            Voltar ao Cardápio
+        </button>
+</main>
+<!-- BottomNavBar (Suppressed per logic: Transactional/Success screen implies departure from main nav flow) -->
+</body></html>
