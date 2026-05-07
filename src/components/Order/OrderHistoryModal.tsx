@@ -12,7 +12,11 @@ interface OrderHistoryModalProps {
 
 type BadgeTone = 'primary' | 'neutral' | 'success' | 'warning' | 'danger';
 
-const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
+const formatCurrency = (value: any) => {
+  const num = typeof value === 'number' ? value : Number(value || 0);
+  if (isNaN(num)) return 'R$ 0,00';
+  return `R$ ${num.toFixed(2).replace('.', ',')}`;
+};
 
 function getStatusLabel(status: string) {
   switch (status) {
@@ -59,8 +63,9 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
   onClose,
   history,
 }) => {
-  const accumulatedTotal = history.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-  const activeOrders = history.filter((order) => !['paid', 'cancelled', 'archived'].includes(order.status));
+  const safeHistory = Array.isArray(history) ? history.filter(Boolean) : [];
+  const accumulatedTotal = safeHistory.reduce((sum, order) => sum + (order?.total_amount || 0), 0);
+  const activeOrders = safeHistory.filter((order) => order && !['paid', 'cancelled', 'archived'].includes(order.status));
 
   return (
     <AnimatePresence>
@@ -145,12 +150,19 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                             </StatusBadge>
                             <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-400">
                               <Timer className="h-3.5 w-3.5" />
-                              {order.created_at
-                                ? new Date(order.created_at).toLocaleTimeString('pt-BR', {
+                              {(() => {
+                                if (!order.created_at) return 'Agora';
+                                try {
+                                  const date = new Date(order.created_at);
+                                  if (isNaN(date.getTime())) return 'Agora';
+                                  return date.toLocaleTimeString('pt-BR', {
                                     hour: '2-digit',
                                     minute: '2-digit',
-                                  })
-                                : 'Agora'}
+                                  });
+                                } catch (e) {
+                                  return 'Agora';
+                                }
+                              })()}
                             </span>
                           </div>
                           <p className="mt-3 font-display text-lg font-black text-slate-950 dark:text-white">
@@ -164,23 +176,25 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                       </div>
 
                       <div className="mt-4 space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-                        {order.items.map((item, index) => (
-                          <div key={`${order.id}-${item.menu_item_id}-${index}`} className="flex gap-3 text-sm">
-                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                              {item.quantity}x
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="font-bold text-slate-700 dark:text-slate-200">{item.name}</p>
-                              {item.notes && (
-                                <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-                                  {item.notes}
-                                </p>
-                              )}
+                        {(Array.isArray(order.items) ? order.items : []).map((item, index) => (
+                          item && (
+                            <div key={`${order.id}-${item.menu_item_id || index}-${index}`} className="flex gap-3 text-sm">
+                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                                {item.quantity || 0}x
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-bold text-slate-700 dark:text-slate-200">{item.name || 'Item'}</p>
+                                {item.notes && (
+                                  <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                                    {item.notes}
+                                  </p>
+                                )}
+                              </div>
+                              <span className="shrink-0 font-bold text-slate-500 dark:text-slate-400">
+                                {formatCurrency((item.price || 0) * (item.quantity || 0))}
+                              </span>
                             </div>
-                            <span className="shrink-0 font-bold text-slate-500 dark:text-slate-400">
-                              {formatCurrency(item.price * item.quantity)}
-                            </span>
-                          </div>
+                          )
                         ))}
                       </div>
                     </article>

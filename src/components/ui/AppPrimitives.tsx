@@ -37,19 +37,20 @@ export function StatusBadge({
   );
 }
 
-interface IconButtonProps {
+interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   label: string;
   icon: LucideIcon;
-  tone?: 'default' | 'primary' | 'danger';
-  className?: string;
-  disabled?: boolean;
-  onClick?: MouseEventHandler<HTMLButtonElement>;
+  tone?: 'default' | 'primary' | 'danger' | 'warning';
+  variant?: 'ghost' | 'solid' | 'outline';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
 }
 
 export function IconButton({
   label,
   icon: Icon,
   tone = 'default',
+  variant = 'solid',
+  size = 'md',
   className,
   ...props
 }: IconButtonProps) {
@@ -58,7 +59,16 @@ export function IconButton({
       ? 'text-primary-600 hover:bg-primary-50 hover:text-primary-700 dark:text-primary-300 dark:hover:bg-primary-950/40'
       : tone === 'danger'
         ? 'text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-300'
-        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white';
+        : tone === 'warning'
+          ? 'text-amber-500 hover:bg-amber-50 hover:text-amber-600 dark:text-amber-400 dark:hover:bg-amber-950/30'
+          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white';
+
+  const sizeClass = {
+    xs: 'h-7 w-7',
+    sm: 'h-8 w-8',
+    md: 'h-10 w-10',
+    lg: 'h-12 w-12'
+  };
 
   return (
     <button
@@ -66,13 +76,14 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cx(
-        'inline-flex h-10 w-10 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950',
+        'inline-flex items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950',
         toneClass,
+        sizeClass[size],
         className
       )}
       {...props}
     >
-      <Icon className="h-5 w-5" />
+      <Icon className={cx(size === 'xs' ? 'h-3.5 w-3.5' : size === 'sm' ? 'h-4 w-4' : 'h-5 w-5')} />
     </button>
   );
 }
@@ -120,6 +131,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   variant?: 'primary' | 'secondary' | 'danger';
   icon?: LucideIcon;
   isLoading?: boolean;
+  size?: 'sm' | 'md' | 'lg';
 }
 
 export function Button({ 
@@ -127,11 +139,12 @@ export function Button({
   variant = 'primary', 
   icon: Icon, 
   isLoading, 
+  size = 'md',
   className, 
   disabled,
   ...props 
 }: ButtonProps) {
-  const baseClass = "inline-flex h-11 items-center justify-center gap-2 rounded-xl px-6 text-sm font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 dark:focus-visible:ring-offset-slate-950";
+  const baseClass = "inline-flex items-center justify-center gap-2 rounded-xl font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 dark:focus-visible:ring-offset-slate-950";
   
   const variantClass = {
     primary: "bg-primary text-on-primary hover:bg-primary-container focus-visible:ring-primary shadow-lifted",
@@ -139,9 +152,15 @@ export function Button({
     danger: "bg-red-50 text-red-600 hover:bg-red-100 focus-visible:ring-red-500 dark:bg-red-950/40 dark:text-red-400 dark:hover:bg-red-900/40"
   };
 
+  const sizeClass = {
+    sm: "h-9 px-4 text-xs",
+    md: "h-11 px-6 text-sm",
+    lg: "h-14 px-8 text-base"
+  };
+
   return (
     <button
-      className={cx(baseClass, variantClass[variant], className)}
+      className={cx(baseClass, variantClass[variant], sizeClass[size], className)}
       disabled={disabled || isLoading}
       {...props}
     >

@@ -1,14 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
   History,
+  Loader2,
   QrCode,
   ReceiptText,
   RefreshCw,
   Utensils,
+  Bell,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -18,10 +20,13 @@ import {
   PublicRestaurantData,
   createPublicOrder,
   getPublicMenu,
+  occupyPublicTable,
+  requestBillClosure,
 } from '../lib/database';
 import { CartModal } from '../components/Order/CartModal';
 import { OrderHistoryModal } from '../components/Order/OrderHistoryModal';
 import { SearchFilterBar } from '../components/Order/SearchFilterBar';
+import { MenuItemCard } from '../components/Order/MenuItemCard';
 import { PublicProductModal } from '../components/Menu/PublicProductModal';
 import { StatusBadge, cx } from '../components/ui/AppPrimitives';
 import toast from 'react-hot-toast';
@@ -33,7 +38,18 @@ const defaultRestaurant: PublicRestaurantData = {
   custom_theme_hex: '#EA1D2C',
 };
 
-const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
+const formatCurrency = (value: any) => {
+  const num = typeof value === 'number' ? value : Number(value || 0);
+  if (isNaN(num)) return 'R$ 0,00';
+  return `R$ ${num.toFixed(2).replace('.', ',')}`;
+};
+
+const isValidUUID = (uuid: string) => {
+  if (!uuid || typeof uuid !== 'string') return false;
+  // Regex mais flexível para UUIDs (permite qualquer versão válida pelo PostgreSQL)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid.trim());
+};
 
 function getPublicErrorMessage(error: unknown): string {
   const errorObject = error && typeof error === 'object' ? error as { code?: string; message?: string } : null;
@@ -42,7 +58,11 @@ function getPublicErrorMessage(error: unknown): string {
     : errorObject?.message || String(error || '');
 
   if (errorObject?.code === 'PGRST202' || message.toLowerCase().includes('could not find the function')) {
-    return 'Cardapio publico indisponivel no momento. Acione a equipe do restaurante.';
+    return 'Cardápio público indisponível no momento. Acione a equipe do restaurante.';
+  }
+
+  if (errorObject?.code === '22P02' || message.toLowerCase().includes('invalid input syntax for type uuid')) {
+    return 'QR Code inválido ou mesa não identificada. Por favor, escaneie novamente.';
   }
 
   if (message.toLowerCase().includes('mesa nao encontrada')) {
@@ -91,6 +111,54 @@ export default function Order() {
     message: string;
     type: 'success' | 'info';
   } | null>(null);
+  const [isClosingBill, setIsClosingBill] = useState(false);
+  const [paymentStep, setPaymentStep] = useState<'summary' | 'requested'>('summary');
+  const [tableData, setTableData] = useState<any>(null);
+  const [isOccupying, setIsOccupying] = useState(false);
+  const hasAttemptedOccupation = useRef<string | null>(null);
+
+  // --- Cart Persistence ---
+  const CART_EXPIRATION_MS = 2 * 60 * 60 * 1000; // 2 hours
+  const cartKey = `cart_table_${tableId}`;
+
+  // Load cart from localStorage
+  useEffect(() => {
+    if (!tableId) return;
+    
+    const saved = localStorage.getItem(cartKey);
+    if (saved) {
+      try {
+        const { items, savedAt } = JSON.parse(saved);
+        const isExpired = Date.now() - (savedAt || 0) > CART_EXPIRATION_MS;
+        
+        if (!isExpired && Array.isArray(items)) {
+          console.log('[PublicMenu] Carrinho recuperado do localStorage');
+          setCart(items);
+        } else {
+          localStorage.removeItem(cartKey);
+        }
+      } catch (e) {
+        console.error('[PublicMenu] Erro ao recuperar carrinho:', e);
+      }
+    }
+  }, [tableId]);
+
+  // Save cart to localStorage
+  useEffect(() => {
+    if (!tableId) return;
+    
+    if (cart.length === 0) {
+      localStorage.removeItem(cartKey);
+      return;
+    }
+
+    const data = {
+      items: cart,
+      savedAt: Date.now(),
+      tableId,
+    };
+    localStorage.setItem(cartKey, JSON.stringify(data));
+  }, [cart, tableId]);
 
   const loadPublicData = async (showLoading = false) => {
     if (!tableId) {
@@ -99,17 +167,31 @@ export default function Order() {
       return;
     }
 
+    if (!isValidUUID(tableId)) {
+      setError('QR Code inválido. Por favor, escaneie novamente o código da mesa.');
+      setLoading(false);
+      return;
+    }
+
     try {
       if (showLoading) setLoading(true);
 
+      console.log('[PublicMenu] Buscando dados para mesa:', tableId);
       const publicMenu = await getPublicMenu(tableId);
-      setRestaurant(publicMenu.restaurant);
-      setTableNumber(publicMenu.table.number || tableId);
-      setItems(publicMenu.items);
-      setCategories(publicMenu.categories);
-      setOrderHistory(publicMenu.orders);
+      
+      if (!publicMenu) {
+        throw new Error('O servidor não retornou dados do cardápio.');
+      }
+
+      setRestaurant(publicMenu.restaurant || defaultRestaurant);
+      setTableNumber(publicMenu.table?.number || tableId);
+      setTableData(publicMenu.table);
+      setItems(publicMenu.items || []);
+      setCategories(publicMenu.categories || []);
+      setOrderHistory(publicMenu.orders || []);
       setError(null);
     } catch (err) {
+      console.error('[PublicMenu] Erro fatal ao carregar dados:', err);
       const message = getPublicErrorMessage(err);
       if (showLoading || items.length === 0) {
         setError(message);
@@ -121,12 +203,43 @@ export default function Order() {
     }
   };
 
+  // Efeito para ocupar a mesa automaticamente ao montar o componente
   useEffect(() => {
-    loadPublicData(true);
-    const interval = window.setInterval(() => loadPublicData(false), 10000);
-    return () => window.clearInterval(interval);
-    // The interval intentionally follows the current tableId only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const handleAutoOccupy = async () => {
+      // Só tenta ocupar se tiver tableId, o status for available e ainda não tiver tentado com sucesso nesta sessão do componente
+      if (tableId && tableData?.status === 'available' && hasAttemptedOccupation.current !== tableId) {
+        hasAttemptedOccupation.current = tableId;
+        setIsOccupying(true);
+        try {
+          const result = await occupyPublicTable(tableId);
+          if (result.success) {
+            toast.success('Mesa ocupada! Bem-vindo.', { id: 'table-occ' });
+            // Atualiza os dados após ocupar para pegar a nova sessão
+            loadPublicData(false);
+          }
+        } catch (err) {
+          // Trata o erro silenciosamente como solicitado
+          console.error('[PublicMenu] Erro silencioso ao ocupar mesa:', err);
+        } finally {
+          setIsOccupying(false);
+        }
+      }
+    };
+
+    handleAutoOccupy();
+  }, [tableId, tableData?.status]);
+
+  useEffect(() => {
+    // Só inicia se o tableId for um UUID válido para evitar spam de erro 22P02 no Supabase
+    if (isValidUUID(tableId)) {
+      loadPublicData(true);
+      const interval = window.setInterval(() => loadPublicData(false), 10000);
+      return () => window.clearInterval(interval);
+    } else {
+      setError('Mesa não identificada ou QR Code inválido.');
+      setLoading(false);
+    }
+    return undefined;
   }, [tableId]);
 
   const showToast = (message: string, type: 'success' | 'info' = 'success') => {
@@ -250,6 +363,7 @@ export default function Order() {
       }
 
       await createPublicOrder(tableId, cart);
+      localStorage.removeItem(cartKey);
       setCart([]);
       setIsCartOpen(false);
       showToast('Pedido enviado para a cozinha!', 'success');
@@ -272,9 +386,24 @@ export default function Order() {
     showToast('Itens removidos do carrinho', 'info');
   };
 
-  const confirmPaymentRequest = () => {
-    setIsPaymentModalOpen(false);
-    showToast('Solicite o fechamento no caixa para concluir o pagamento.', 'info');
+  const confirmPaymentRequest = async () => {
+    if (!tableId || isClosingBill) return;
+
+    setIsClosingBill(true);
+    try {
+      const result = await requestBillClosure(tableId, totalToPay);
+      if (result.success) {
+        setPaymentStep('requested');
+        toast.success('Solicitação enviada!', { id: 'bill-req-success' });
+      } else {
+        toast.error('Não foi possível enviar a solicitação. Tente novamente.');
+      }
+    } catch (err) {
+      console.error('[PublicMenu] Erro ao solicitar fechamento:', err);
+      toast.error('Erro ao conectar com o servidor.');
+    } finally {
+      setIsClosingBill(false);
+    }
   };
 
   const cartTotal = (cart ?? []).reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -284,8 +413,18 @@ export default function Order() {
   const totalToPay = cartTotal + unpaidOrdersTotal;
 
   const allCategories = useMemo(() => {
-    const categoryNames = categories.length > 0 ? categories : items.map((item) => item.category);
-    return Array.from(new Set(categoryNames.filter(Boolean)));
+    try {
+      const safeItems = Array.isArray(items) ? items : [];
+      const categoryNames = (Array.isArray(categories) && categories.length > 0) 
+        ? categories 
+        : safeItems.map((item) => item?.category).filter((cat): cat is string => typeof cat === 'string' && cat.trim() !== '');
+      
+      const uniqueCategories = Array.from(new Set(categoryNames.filter((cat) => typeof cat === 'string' && cat.trim() !== '')));
+      return uniqueCategories.length > 0 ? uniqueCategories : ['Geral'];
+    } catch (e) {
+      console.error('[PublicMenu] Error in allCategories useMemo:', e);
+      return ['Geral'];
+    }
   }, [categories, items]);
 
   useEffect(() => {
@@ -295,25 +434,42 @@ export default function Order() {
   }, [allCategories, selectedCategory]);
 
   const filteredItems = useMemo(() => {
-    const search = searchQuery.trim().toLowerCase();
-    return items.filter((item) => {
-      const matchesSearch =
-        !search ||
-        item.name.toLowerCase().includes(search) ||
-        item.category.toLowerCase().includes(search) ||
-        (item.description || '').toLowerCase().includes(search);
+    try {
+      const search = searchQuery.trim().toLowerCase();
+      const safeItems = Array.isArray(items) ? items : [];
+      return safeItems.filter((item) => {
+        if (!item) return false;
+        
+        const name = String(item.name || '').toLowerCase();
+        const category = String(item.category || '').toLowerCase();
+        const description = String(item.description || '').toLowerCase();
+        
+        const matchesSearch =
+          !search ||
+          name.includes(search) ||
+          category.includes(search) ||
+          description.includes(search);
 
-      const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-      return matchesSearch && matchesCategory;
-    });
+        const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+        return matchesSearch && matchesCategory;
+      });
+    } catch (e) {
+      console.error('[PublicMenu] Error in filteredItems useMemo:', e);
+      return [];
+    }
   }, [items, searchQuery, selectedCategory]);
 
   const groupedItems = useMemo(() => {
-    return filteredItems.reduce((accumulator, item) => {
-      if (!accumulator[item.category]) accumulator[item.category] = [];
-      accumulator[item.category].push(item);
-      return accumulator;
-    }, {} as Record<string, MenuItemData[]>);
+    const groups: Record<string, MenuItemData[]> = {};
+    if (!filteredItems || !Array.isArray(filteredItems)) return groups;
+
+    filteredItems.forEach(item => {
+      if (!item) return;
+      const category = item.category || 'Geral';
+      if (!groups[category]) groups[category] = [];
+      groups[category].push(item);
+    });
+    return groups;
   }, [filteredItems]);
 
   const visibleCategories = useMemo(() => {
@@ -576,7 +732,6 @@ export default function Order() {
       <OrderHistoryModal
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
-        history={orderHistory}
       />
 
       <AnimatePresence>
@@ -588,39 +743,151 @@ export default function Order() {
               exit={{ scale: 0.96, opacity: 0, y: 16 }}
               role="dialog"
               aria-modal="true"
-              aria-label="Solicitar fechamento da conta"
-              className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900"
+              className="w-full max-w-sm overflow-hidden rounded-[2.5rem] bg-white shadow-2xl dark:bg-slate-900 border border-white/20"
             >
-              <div className="p-6 text-center">
-                <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-2xl border-4 border-[#bb001b] bg-white text-slate-950 shadow-inner">
-                  <QrCode className="h-28 w-28" />
-                </div>
-                <p className="mt-5 text-xs font-black uppercase tracking-normal text-slate-400">
-                  Total a pagar
-                </p>
-                <p className="mt-1 font-['Plus_Jakarta_Sans'] text-4xl font-black text-[#bb001b]">
-                  {formatCurrency(totalToPay)}
-                </p>
-                <p className="mt-2 text-sm leading-relaxed text-[#5d3f3d]">
-                  Solicite o fechamento para validar o pagamento no caixa.
-                </p>
+              <AnimatePresence mode="wait">
+                {paymentStep === 'summary' ? (
+                  <motion.div
+                    key="summary"
+                    initial={{ x: 20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: -20, opacity: 0 }}
+                    className="p-8"
+                  >
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="h-10 w-10 rounded-2xl bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center text-amber-600">
+                        <ReceiptText className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h3 className="font-['Plus_Jakarta_Sans'] text-lg font-black text-slate-900 dark:text-white leading-none">Resumo da Conta</h3>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Mesa {tableNumber}</p>
+                      </div>
+                    </div>
 
-                <button 
-                  type="button" 
-                  onClick={confirmPaymentRequest} 
-                  className="mt-6 h-12 w-full bg-[#bb001b] text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-red-600/20"
-                >
-                  Solicitar fechamento
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsPaymentModalOpen(false)}
-                  className="mt-3 h-11 w-full rounded-lg text-sm font-bold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
-                >
-                  Voltar
-                </button>
-              </div>
+                    <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar mb-6">
+                      {unpaidOrders.length === 0 && cart.length === 0 ? (
+                        <p className="text-sm text-slate-500 text-center py-4">Nenhum item pendente.</p>
+                      ) : (
+                        <>
+                          {/* Itens do Carrinho (se houver) */}
+                          {cart.map((item, idx) => (
+                            <div key={`cart-${idx}`} className="flex justify-between items-start group">
+                              <div className="flex-1">
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight">
+                                  {item.quantity}x {item.name}
+                                </p>
+                                {item.options?.map(opt => (
+                                  <p key={opt.id} className="text-[10px] text-slate-400 font-medium">+ {opt.name}</p>
+                                ))}
+                              </div>
+                              <p className="text-sm font-black text-slate-900 dark:text-white">
+                                {formatCurrency(item.price * item.quantity)}
+                              </p>
+                            </div>
+                          ))}
+
+                          {/* Itens de Pedidos Anteriores */}
+                          {unpaidOrders.map((order) => (
+                            <div key={order.id} className="space-y-2 border-t border-slate-50 dark:border-slate-800/50 pt-2">
+                              {order.items.map((item: any, idx: number) => (
+                                <div key={`${order.id}-${idx}`} className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight">
+                                      {item.quantity}x {item.name}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 font-medium italic">Pedido em {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                                  </div>
+                                  <p className="text-sm font-black text-slate-900 dark:text-white">
+                                    {formatCurrency((item.price || 0) * (item.quantity || 1))}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+
+                    <div className="rounded-3xl bg-slate-50 dark:bg-slate-800/50 p-6 space-y-3 mb-8 border border-slate-100 dark:border-slate-800">
+                      <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                        <span className="text-xs font-bold uppercase tracking-wider">Subtotal</span>
+                        <span className="text-sm font-bold">{formatCurrency(totalToPay)}</span>
+                      </div>
+                      <div className="h-px bg-slate-200 dark:bg-slate-700" />
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Total Geral</span>
+                        <span className="text-2xl font-black text-[#bb001b] dark:text-red-500">{formatCurrency(totalToPay)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                      <button 
+                        onClick={confirmPaymentRequest}
+                        disabled={isClosingBill || (unpaidOrders.length === 0 && cart.length === 0)}
+                        className="w-full h-14 bg-[#bb001b] hover:bg-red-700 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-red-600/20 active:scale-[0.98] transition-all disabled:opacity-50"
+                      >
+                        {isClosingBill ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <>
+                            <Bell className="h-5 w-5" />
+                            Solicitar Fechamento da Conta
+                          </>
+                        )}
+                      </button>
+                      <button 
+                        onClick={() => setIsPaymentModalOpen(false)}
+                        className="w-full h-12 text-slate-400 hover:text-slate-600 font-bold text-sm uppercase tracking-widest transition-colors"
+                      >
+                        Voltar
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="requested"
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="p-10 text-center"
+                  >
+                    <div className="relative mx-auto w-24 h-24 mb-8">
+                      <motion.div 
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: 'spring', damping: 12, stiffness: 200 }}
+                        className="absolute inset-0 bg-emerald-500 rounded-full flex items-center justify-center text-white z-10"
+                      >
+                        <CheckCircle2 className="h-12 w-12" />
+                      </motion.div>
+                      <motion.div 
+                        animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="absolute -inset-4 border-2 border-emerald-500 rounded-full"
+                      />
+                    </div>
+
+                    <h3 className="font-['Plus_Jakarta_Sans'] text-2xl font-black text-slate-900 dark:text-white mb-2 italic">Solicitação Enviada!</h3>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-8">
+                      Um atendente está a caminho da sua mesa para finalizar o pagamento.
+                    </p>
+
+                    <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-3xl p-6 mb-8 border border-emerald-100 dark:border-emerald-500/20">
+                      <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.2em] mb-1">Total Confirmado</p>
+                      <p className="text-3xl font-black text-emerald-700 dark:text-emerald-300">{formatCurrency(totalToPay)}</p>
+                    </div>
+
+                    <button 
+                      onClick={() => {
+                        setIsPaymentModalOpen(false);
+                        setTimeout(() => setPaymentStep('summary'), 300);
+                      }}
+                      className="w-full h-14 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black text-sm uppercase tracking-widest active:scale-[0.98] transition-all shadow-xl shadow-slate-900/10 dark:shadow-none"
+                    >
+                      Fechar
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           </div>
         )}

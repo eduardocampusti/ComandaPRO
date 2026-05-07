@@ -162,6 +162,7 @@ export function ReservationModal({
                       icon={Check}
                       variant="ghost"
                       size="sm"
+                      label="Confirmar chegada"
                       onClick={() => onUpdateStatus(res.id, 'seated')}
                       className="text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10"
                       title="Confirmar chegada"
@@ -170,6 +171,7 @@ export function ReservationModal({
                       icon={Trash2}
                       variant="ghost"
                       size="sm"
+                      label="Excluir reserva"
                       onClick={() => onDelete(res)}
                       className="text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
                       title="Excluir reserva"

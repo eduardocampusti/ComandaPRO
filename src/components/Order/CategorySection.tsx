@@ -51,18 +51,20 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
         )}
       </div>
 
-      {items.length > 0 ? (
+      {Array.isArray(items) && items.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
           {items.map((item) => (
-            <MenuItemCard
-              key={item.id}
-              item={item}
-              isEditMode={isEditMode}
-              isAdmin={isAdmin}
-              onAdd={onAddToCart}
-              onEdit={onEditItem}
-              onToggleAvailability={onToggleAvailability}
-            />
+            item && (
+              <MenuItemCard
+                key={item.id}
+                item={item}
+                isEditMode={isEditMode}
+                isAdmin={isAdmin}
+                onAdd={onAddToCart}
+                onEdit={onEditItem}
+                onToggleAvailability={onToggleAvailability}
+              />
+            )
           ))}
         </div>
       ) : (

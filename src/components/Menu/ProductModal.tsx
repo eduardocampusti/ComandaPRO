@@ -31,6 +31,7 @@ export function ProductModal({ isOpen, onClose, product, categories, onSuccess }
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<'basic' | 'options'>('basic');
   const [showSuccess, setShowSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Basic info state
   const [name, setName] = useState('');
@@ -325,6 +326,20 @@ export function ProductModal({ isOpen, onClose, product, categories, onSuccess }
                 variant="success" 
                 title="Produto Salvo!" 
                 description="As alterações foram aplicadas com sucesso ao cardápio."
+              />
+            </motion.div>
+          )}
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+              animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
+              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+            >
+              <Alert 
+                variant="destructive" 
+                title="Erro" 
+                description={error}
               />
             </motion.div>
           )}

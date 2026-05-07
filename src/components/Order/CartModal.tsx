@@ -16,7 +16,11 @@ interface CartModalProps {
   isSubmitting: boolean;
 }
 
-const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
+const formatCurrency = (value: any) => {
+  const num = typeof value === 'number' ? value : Number(value || 0);
+  if (isNaN(num)) return 'R$ 0,00';
+  return `R$ ${num.toFixed(2).replace('.', ',')}`;
+};
 
 export const CartModal: React.FC<CartModalProps> = ({
   isOpen,
@@ -30,9 +34,10 @@ export const CartModal: React.FC<CartModalProps> = ({
   onCheckout,
   isSubmitting,
 }) => {
-  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const totalGeral = cartTotal + unpaidOrdersTotal;
-  const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const safeCart = Array.isArray(cart) ? cart : [];
+  const cartTotal = safeCart.reduce((sum, item) => sum + (item?.price || 0) * (item?.quantity || 0), 0);
+  const totalGeral = cartTotal + (unpaidOrdersTotal || 0);
+  const itemCount = safeCart.reduce((sum, item) => sum + (item?.quantity || 0), 0);
 
   return (
     <AnimatePresence>

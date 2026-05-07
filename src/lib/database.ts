@@ -11,6 +11,9 @@ export interface TableData {
   active?: boolean;
   opened_at?: string;
   current_session_id?: string | null;
+  payment_requested?: boolean;
+  payment_requested_at?: string;
+  payment_requested_amount?: number;
   created_at?: string;
 }
 
@@ -219,6 +222,15 @@ export async function createPublicOrder(
   return normalizeOrder(data);
 }
 
+export async function occupyPublicTable(tableId: string): Promise<{ success: boolean; status: string; session_id: string }> {
+  const { data, error } = await supabase.rpc('occupy_public_table', {
+    p_table_id: tableId,
+  });
+
+  if (error) throw error;
+  return data;
+}
+
 // ========== Tables ==========
 
 export async function fetchTables(): Promise<TableData[]> {
@@ -246,9 +258,39 @@ export async function updateTable(id: string, updates: Partial<TableData>): Prom
   if (error) throw error;
 }
 
+export async function updateTableStatusSafe(id: string, newStatus: string): Promise<{ success: boolean; new_status: string }> {
+  const { data, error } = await supabase.rpc('update_table_status_safe', {
+    p_table_id: id,
+    p_new_status: newStatus,
+  });
+
+  if (error) throw error;
+  return data;
+}
+
 export async function deleteTable(id: string): Promise<void> {
   const { error } = await supabase.from('tables').delete().eq('id', id);
   if (error) throw error;
+}
+
+export async function cleanupStaleTables(): Promise<{ success: boolean; cleaned_count: number; message: string }> {
+  const { data, error } = await supabase.rpc('cleanup_stale_tables');
+
+  if (error) {
+    console.error('Erro ao limpar mesas estagnadas:', error);
+    throw error;
+  }
+  return data;
+}
+
+export async function requestBillClosure(tableId: string, totalAmount: number): Promise<{ success: boolean }> {
+  const { data, error } = await supabase.rpc('request_bill_closure', {
+    p_table_id: tableId,
+    p_total_amount: totalAmount,
+  });
+
+  if (error) throw error;
+  return data;
 }
 
 // ========== Reservations ==========
@@ -542,88 +584,120 @@ export async function updateSettings(settings: AppSettings): Promise<void> {
 // ========== Normalize helpers (snake_case DB → camelCase app) ==========
 
 function normalizePublicMenu(raw: any): PublicMenuResponse {
+  if (!raw) {
+    return {
+      table: { id: '', number: 0, status: 'available', active: false },
+      restaurant: { business_name: 'Comanda Digital Pro', logo_url: '', theme_color: 'emerald', custom_theme_hex: '#10b981' },
+      categories: [],
+      items: [],
+      orders: [],
+    };
+  }
+
   const table = raw?.table || {};
   const restaurant = raw?.restaurant || {};
 
   return {
     table: {
-      id: table.id || '',
+      id: String(table.id || ''),
       number: Number(table.number ?? 0),
       status: (table.status || 'available') as TableData['status'],
-      active: table.active ?? false,
+      active: Boolean(table.active ?? false),
     },
     restaurant: {
-      business_name: restaurant.business_name ?? 'Comanda Digital Pro',
-      logo_url: restaurant.logo_url ?? '',
-      theme_color: restaurant.theme_color ?? 'emerald',
-      custom_theme_hex: restaurant.custom_theme_hex ?? '#10b981',
+      business_name: String(restaurant.business_name ?? 'Comanda Digital Pro'),
+      logo_url: String(restaurant.logo_url ?? ''),
+      theme_color: String(restaurant.theme_color ?? 'emerald'),
+      custom_theme_hex: String(restaurant.custom_theme_hex ?? '#10b981'),
     },
-    categories: Array.isArray(raw?.categories) ? raw.categories : [],
-    items: Array.isArray(raw?.items) ? raw.items.map(normalizeMenuItem) : [],
-    orders: Array.isArray(raw?.orders) ? raw.orders.map(normalizeOrder) : [],
+    categories: Array.isArray(raw?.categories) ? raw.categories.filter((c: any) => typeof c === 'string') : [],
+    items: Array.isArray(raw?.items) ? raw.items.filter(Boolean).map(normalizeMenuItem) : [],
+    orders: Array.isArray(raw?.orders) ? raw.orders.filter(Boolean).map(normalizeOrder) : [],
   };
 }
 
 function normalizeTable(raw: any): TableData {
+  if (!raw) return { id: '', number: 0, status: 'available', capacity: 0 };
   return {
-    id: raw.id,
-    number: Number(raw.number),
-    status: raw.status,
-    capacity: raw.capacity,
-    active: raw.active ?? false,
+    id: String(raw.id || ''),
+    number: Number(raw.number ?? 0),
+    status: (raw.status || 'available') as TableData['status'],
+    capacity: Number(raw.capacity ?? 0),
+    active: Boolean(raw.active ?? false),
     opened_at: raw.opened_at,
     current_session_id: raw.current_session_id,
+    payment_requested: Boolean(raw.payment_requested ?? false),
+    payment_requested_at: raw.payment_requested_at,
+    payment_requested_amount: raw.payment_requested_amount ? Number(raw.payment_requested_amount) : undefined,
     created_at: raw.created_at,
   };
 }
 
 function normalizeReservation(raw: any): ReservationData {
+  if (!raw) return { id: '', table_id: '', customer_name: '', date: '', time: '', guests: 0, status: 'scheduled' };
   return {
-    id: raw.id,
-    table_id: raw.table_id,
-    customer_name: raw.customer_name,
-    date: raw.date,
-    time: raw.time,
-    guests: raw.guests,
-    status: raw.status,
+    id: String(raw.id || ''),
+    table_id: String(raw.table_id || ''),
+    customer_name: String(raw.customer_name || 'Cliente'),
+    date: String(raw.date || ''),
+    time: String(raw.time || ''),
+    guests: Number(raw.guests ?? 0),
+    status: (raw.status || 'scheduled') as ReservationData['status'],
     created_at: raw.created_at,
   };
 }
 
 function normalizeOrder(raw: any): OrderData {
+  if (!raw) return { id: '', table_id: '', items: [], status: 'pending', total_amount: 0 };
+  
   return {
-    id: raw.id,
-    table_id: raw.table_id,
-    items: (raw.items || []).map((item: any) => ({
-      menu_item_id: item.menu_item_id || item.menuItemId,
-      name: item.name,
-      price: Number(item.price ?? 0),
-      quantity: Number(item.quantity ?? 0),
-      notes: item.notes,
-      options: item.options,
-    })),
-    status: raw.status,
+    id: raw.id || '',
+    table_id: raw.table_id || '',
+    items: (Array.isArray(raw.items) ? raw.items : []).map((item: any) => {
+      if (!item) return { menu_item_id: '', name: 'Item inválido', price: 0, quantity: 0 };
+      return {
+        menu_item_id: item.menu_item_id || item.menuItemId || '',
+        name: item.name || 'Item sem nome',
+        price: Number(item.price ?? 0),
+        quantity: Number(item.quantity ?? 0),
+        notes: item.notes || '',
+        options: Array.isArray(item.options) ? item.options : [],
+      };
+    }),
+    status: raw.status || 'pending',
     total_amount: Number(raw.total_amount ?? raw.totalAmount ?? 0),
     created_at: raw.created_at,
   };
 }
 
 function normalizeMenuItem(raw: any): MenuItemData {
+  if (!raw) return {
+    id: '',
+    name: 'Item não encontrado',
+    price: 0,
+    category: 'Geral',
+    available: false,
+    is_archived: false,
+    track_stock: false,
+    stock_quantity: 0,
+    stock_alert_threshold: 0
+  };
+
   return {
-    id: raw.id,
-    name: raw.name,
-    description: raw.description,
+    id: raw.id || '',
+    name: raw.name || 'Item sem nome',
+    description: raw.description || '',
     price: Number(raw.price ?? 0),
-    category: raw.category,
+    category: raw.category || 'Geral',
     category_id: raw.category_id,
-    image_url: raw.image_url,
+    image_url: raw.image_url || '',
     available: raw.available ?? true,
     is_archived: raw.is_archived ?? false,
     track_stock: raw.track_stock ?? false,
     stock_quantity: Number(raw.stock_quantity ?? 0),
     stock_alert_threshold: Number(raw.stock_alert_threshold ?? 10),
     created_at: raw.created_at,
-    options: Array.isArray(raw.options) ? raw.options.map(normalizeMenuItemOption) : undefined,
+    options: Array.isArray(raw.options) ? raw.options.filter(Boolean).map(normalizeMenuItemOption) : undefined,
   };
 }
 
@@ -638,17 +712,18 @@ function normalizeCategory(raw: any): CategoryData {
 }
 
 function normalizeMenuItemOption(raw: any): MenuItemOptionData {
+  if (!raw) return { id: '', menu_item_id: '', name: '', price: 0, type: 'addon', sort_order: 0, active: false };
   return {
-    id: raw.id,
-    menu_item_id: raw.menu_item_id,
-    name: raw.name,
+    id: raw.id || '',
+    menu_item_id: raw.menu_item_id || '',
+    name: raw.name || '',
     price: Number(raw.price ?? 0),
-    type: raw.type,
+    type: raw.type || 'addon',
     group_name: raw.group_name,
     min_select: raw.min_select,
     max_select: raw.max_select,
-    sort_order: raw.sort_order,
-    active: raw.active,
+    sort_order: raw.sort_order || 0,
+    active: raw.active ?? true,
     created_at: raw.created_at,
   };
 }

@@ -12,6 +12,12 @@ interface PublicProductModalProps {
   primaryColorHex: string;
 }
 
+const formatCurrency = (value: any) => {
+  const num = typeof value === 'number' ? value : Number(value || 0);
+  if (isNaN(num)) return 'R$ 0,00';
+  return `R$ ${num.toFixed(2).replace('.', ',')}`;
+};
+
 export function PublicProductModal({
   isOpen,
   onClose,
@@ -133,7 +139,7 @@ export function PublicProductModal({
       });
 
     const cartItem: CartItem = {
-      cart_item_id: crypto.randomUUID(),
+      cart_item_id: Math.random().toString(36).substring(2, 9) + Date.now().toString(36),
       menu_item_id: product.id,
       name: product.name,
       price: product.price + cartItemOptions.reduce((sum, o) => sum + o.price, 0),
@@ -208,11 +214,9 @@ export function PublicProductModal({
                   {opt.name}
                 </span>
               </div>
-              {opt.price > 0 && (
                 <span className="font-plus-jakarta-sans text-sm font-bold text-primary-600 dark:text-primary-400">
-                  + R$ {opt.price.toFixed(2)}
+                  + {formatCurrency(opt.price)}
                 </span>
-              )}
               <input 
                 type={group.max !== 1 ? "checkbox" : "radio"}
                 className="sr-only"
@@ -287,7 +291,7 @@ export function PublicProductModal({
               
               <div className="flex items-center gap-3 pt-2">
                 <span className="font-plus-jakarta-sans text-2xl font-black text-primary-600 dark:text-primary-400">
-                  R$ {product.price.toFixed(2)}
+                  {formatCurrency(product.price)}
                 </span>
                 {product.track_stock && (
                   <span className={cx(
@@ -357,7 +361,7 @@ export function PublicProductModal({
                   <span className="material-symbols-outlined">shopping_cart</span>
                   <span>Adicionar</span>
                 </div>
-                <span className="text-lg">R$ {calculateTotal().toFixed(2)}</span>
+                <span className="text-lg">{formatCurrency(calculateTotal())}</span>
               </button>
             </div>
           </div>

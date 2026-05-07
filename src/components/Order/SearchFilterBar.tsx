@@ -59,7 +59,7 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
             Todos
           </button>
 
-          {categories.map((category) => (
+          {Array.isArray(categories) && categories.map((category) => (
             <button
               key={category}
               type="button"

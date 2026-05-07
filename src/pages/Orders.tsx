@@ -22,9 +22,9 @@ import {
   XCircle,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { fetchOrders, fetchTables, updateOrder } from '../lib/database';
+import { fetchOrders, fetchTables, updateOrder, updateTable, cleanupStaleTables } from '../lib/database';
 import { supabase } from '../lib/supabase';
-import type { CartItem, OrderData as DatabaseOrderData } from '../lib/database';
+import type { CartItem, OrderData as DatabaseOrderData, TableData } from '../lib/database';
 import { cx } from '../components/ui/AppPrimitives';
 
 type OrderStatus = DatabaseOrderData['status'];
@@ -154,6 +154,11 @@ export default function Orders() {
 
   const audioContext = useRef<AudioContext | null>(null);
   const prevPendingCount = useRef<number>(0);
+  const prevReadyCount = useRef<number>(0);
+  const [autoAdvance, setAutoAdvance] = useState(false);
+  const [autoAdvanceThreshold] = useState(20); // 20 minutes
+  const [advancingOrders, setAdvancingOrders] = useState<Set<string>>(new Set());
+  const [paymentRequests, setPaymentRequests] = useState<TableData[]>([]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -198,10 +203,58 @@ export default function Orders() {
     }
   };
 
+  const playBeepReady = () => {
+    try {
+      if (!audioContext.current) {
+        audioContext.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const context = audioContext.current;
+      if (context.state === 'suspended') context.resume();
+
+      const playNote = (frequency: number, startTime: number, duration: number) => {
+        const oscillator = context.createOscillator();
+        const gainNode = context.createGain();
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(frequency, startTime);
+
+        gainNode.gain.setValueAtTime(0, startTime);
+        gainNode.gain.linearRampToValueAtTime(0.2, startTime + 0.05);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(context.destination);
+
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+      };
+
+      const currentTime = context.currentTime;
+      playNote(523.25, currentTime, 0.2);
+      playNote(659.25, currentTime + 0.1, 0.2);
+      playNote(783.99, currentTime + 0.2, 0.2);
+      playNote(1046.50, currentTime + 0.3, 0.4);
+    } catch (beepError) {
+      console.log('Audio not supported or blocked', beepError);
+    }
+  };
+
   const loadTables = async () => {
     try {
       const tables = await fetchTables();
       const newMap = new Map<string, string | number>();
+      
+      // Filtra mesas que solicitaram pagamento
+      const requested = tables.filter(t => t.payment_requested);
+      
+      // Dispara beep se houver nova solicitação que não conhecíamos
+      const newRequests = requested.filter(r => !paymentRequests.some(prev => prev.id === r.id));
+      if (newRequests.length > 0) {
+        playBeep();
+      }
+      
+      setPaymentRequests(requested);
+
       tables.forEach((table) => {
         newMap.set(table.id, table.number);
       });
@@ -287,6 +340,32 @@ export default function Orders() {
     };
   }, []);
 
+  // Auto-avanço de pedidos
+  useEffect(() => {
+    if (!autoAdvance) return;
+
+    const checkAutoAdvance = async () => {
+      const nowMs = new Date().getTime();
+      const ordersToAdvance = orders.filter(order => {
+        if (order.status !== 'preparing') return false;
+        if (!order.created_at) return false;
+        const createdAtMs = new Date(order.created_at).getTime();
+        const diffMins = (nowMs - createdAtMs) / 60000;
+        return diffMins >= autoAdvanceThreshold;
+      });
+
+      if (ordersToAdvance.length > 0) {
+        console.log(`Auto-avançando ${ordersToAdvance.length} pedidos...`);
+        for (const order of ordersToAdvance) {
+          await updateOrderStatus(order.id, 'ready');
+        }
+      }
+    };
+
+    const interval = window.setInterval(checkAutoAdvance, 30000); // 30 segundos
+    return () => window.clearInterval(interval);
+  }, [autoAdvance, orders, autoAdvanceThreshold]);
+
   useEffect(() => {
     if (rawOrders.length === 0) {
       setOrders([]);
@@ -307,15 +386,40 @@ export default function Orders() {
     }
     prevPendingCount.current = currentPendingCount;
 
+    const currentReadyCount = compiledOrders.filter((order) => order.status === 'ready').length;
+    if (currentReadyCount > prevReadyCount.current) {
+      playBeepReady();
+    }
+    prevReadyCount.current = currentReadyCount;
+
     setOrders(compiledOrders);
   }, [rawOrders, tablesMap]);
 
   const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
+      // Feedback visual momentâneo
+      setAdvancingOrders(prev => new Set(prev).add(orderId));
+      setTimeout(() => {
+        setAdvancingOrders(prev => {
+          const next = new Set(prev);
+          next.delete(orderId);
+          return next;
+        });
+      }, 1500);
+
       await updateOrder(orderId, { status: newStatus });
       await loadOrders();
     } catch (updateError) {
       console.error(`Erro ao atualizar pedido ${orderId}:`, updateError);
+    }
+  };
+
+  const handleDismissPaymentRequest = async (tableId: string) => {
+    try {
+      await updateTable(tableId, { payment_requested: false });
+      await loadTables();
+    } catch (err) {
+      console.error('Erro ao marcar mesa como atendida:', err);
     }
   };
 
@@ -329,6 +433,8 @@ export default function Orders() {
       await updateOrder(orderToCancel, { status: 'cancelled' });
       setOrderToCancel(null);
       await loadOrders();
+      // Limpa mesas que possam ter ficado vazias após o cancelamento
+      cleanupStaleTables().catch(err => console.error('Erro ao limpar mesas após cancelamento:', err));
     } catch (cancelError) {
       console.error(`Erro ao cancelar pedido ${orderToCancel}:`, cancelError);
       setOrderToCancel(null);
@@ -545,16 +651,20 @@ export default function Orders() {
       ? createdDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       : 'Agora';
 
+    const isAdvancing = advancingOrders.has(order.id);
+
     return (
       <article
         key={order.id}
         className={cx(
           'group relative flex min-h-[280px] flex-col overflow-hidden rounded-2xl border bg-white shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-lifted dark:bg-slate-900',
-          urgency.level === 'critical'
-            ? 'border-red-400 ring-2 ring-red-200 dark:border-red-700 dark:ring-red-950/70'
-            : urgency.level === 'warning'
-              ? 'border-amber-400 ring-2 ring-amber-100 dark:border-amber-700 dark:ring-amber-950/70'
-              : 'border-slate-200 dark:border-slate-800'
+          isAdvancing 
+            ? 'border-green-500 ring-4 ring-green-500/20 bg-green-50/50 dark:bg-green-900/10'
+            : urgency.level === 'critical'
+              ? 'border-red-400 ring-2 ring-red-200 dark:border-red-700 dark:ring-red-950/70'
+              : urgency.level === 'warning'
+                ? 'border-amber-400 ring-2 ring-amber-100 dark:border-amber-700 dark:ring-amber-950/70'
+                : 'border-slate-200 dark:border-slate-800'
         )}
       >
         {urgency.level !== 'normal' && (
@@ -794,6 +904,22 @@ export default function Orders() {
                     className="app-input h-10 pl-10"
                   />
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setAutoAdvance(!autoAdvance)}
+                  aria-label="Auto-avanço"
+                  title={`Auto-avanço: ${autoAdvance ? 'Ligado' : 'Desligado'}`}
+                  className={cx(
+                    "inline-flex h-10 px-3 shrink-0 items-center justify-center gap-2 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+                    autoAdvance 
+                      ? "bg-primary-600 text-white border-primary-600" 
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+                  )}
+                >
+                  <Clock3 className="h-5 w-5" />
+                  <span className="hidden sm:inline text-sm font-bold">Auto {autoAdvance ? 'ON' : 'OFF'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -825,6 +951,57 @@ export default function Orders() {
           </div>
         </div>
       </header>
+
+      {/* Banner de solicitações de pagamento */}
+      <AnimatePresence>
+        {paymentRequests.length > 0 && (
+          <motion.div
+            initial={{ height: 0, opacity: 0, marginBottom: 0 }}
+            animate={{ height: 'auto', opacity: 1, marginBottom: 24 }}
+            exit={{ height: 0, opacity: 0, marginBottom: 0 }}
+            className="space-y-2 overflow-hidden"
+          >
+            {paymentRequests.map((req) => (
+              <motion.div
+                key={req.id}
+                layout
+                initial={{ x: -20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-soft dark:border-amber-900/50 dark:bg-amber-950/30"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400">
+                    <AlertCircle className="h-7 w-7 animate-pulse" />
+                  </div>
+                  <div>
+                    <p className="font-display text-lg font-black text-amber-950 dark:text-amber-100">
+                      Mesa {req.number} solicitou o fechamento da conta
+                    </p>
+                    <div className="mt-0.5 flex items-center gap-2 text-sm font-bold text-amber-700 dark:text-amber-300">
+                      <span className="flex items-center gap-1">
+                        <Receipt className="h-3.5 w-3.5" />
+                        Total: {formatCurrency(req.payment_requested_amount || 0)}
+                      </span>
+                      <span className="h-1 w-1 rounded-full bg-amber-300" />
+                      <span className="flex items-center gap-1">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        {req.payment_requested_at ? new Date(req.payment_requested_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDismissPaymentRequest(req.id)}
+                  className="inline-flex h-11 items-center justify-center rounded-lg bg-amber-600 px-6 text-sm font-black text-white shadow-lifted transition-all hover:bg-amber-500 active:scale-95"
+                >
+                  Atendido
+                </button>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {error && (
         <div className="mb-5 flex items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800 shadow-soft dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
@@ -933,6 +1110,8 @@ export default function Orders() {
                       {group.orders.length} pedido(s)
                     </span>
                   </div>
+                  
+
                   <div className="flex flex-col gap-4 overflow-y-auto p-4">
                     {group.orders.map((order) => renderOrderCard(order))}
                   </div>

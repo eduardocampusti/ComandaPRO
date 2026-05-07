@@ -48,6 +48,10 @@ export const TABLE_STATUS_STYLES = {
     timerBlock: 'bg-red-100 text-red-600',
     priceLabel: 'text-red-400',
     priceText: 'text-red-700',
+    emptyText: '',
+    clientBlock: '',
+    clientName: '',
+    clientTime: '',
     primaryBtn: 'bg-red-600 hover:bg-red-700 text-white',
     secondaryBtn: 'border-red-200 text-red-600 bg-transparent hover:bg-red-50',
     icon: Users,
@@ -60,6 +64,10 @@ export const TABLE_STATUS_STYLES = {
     headerBorder: 'border-b-[#FDE68A]',
     numberText: 'text-amber-600',
     badge: 'bg-amber-500 text-white',
+    timerBlock: '',
+    priceLabel: '',
+    priceText: '',
+    emptyText: '',
     clientBlock: 'bg-amber-100 border-amber-200',
     clientName: 'text-amber-900',
     clientTime: 'text-amber-700',
@@ -75,6 +83,12 @@ export const TABLE_STATUS_STYLES = {
     headerBorder: 'border-b-emerald-200',
     numberText: 'text-emerald-700',
     badge: 'bg-emerald-600 text-white',
+    timerBlock: '',
+    priceLabel: '',
+    priceText: '',
+    clientBlock: '',
+    clientName: '',
+    clientTime: '',
     emptyText: 'text-emerald-600 opacity-70',
     primaryBtn: 'bg-emerald-600 hover:bg-emerald-700 text-white',
     secondaryBtn: 'border-emerald-200 text-emerald-700 bg-transparent hover:bg-emerald-50',
@@ -159,6 +173,7 @@ export function TableCard({
                 icon={MoreVertical}
                 variant="ghost"
                 size="sm"
+                label="Menu de ações"
                 onClick={(e) => { e.stopPropagation(); onToggleMenu(table.id); }}
                 className={cx("opacity-0 group-hover:opacity-100 transition-opacity", styles.numberText)}
               />

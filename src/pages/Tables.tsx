@@ -25,6 +25,7 @@ import {
   deleteReservation as deleteReservationInDb,
   updateTable,
   checkExistingReservation,
+  cleanupStaleTables,
 } from '../lib/database';
 import { cx, Card, Button } from '../components/ui/AppPrimitives';
 import { useAuth } from '../contexts/AuthContext';
@@ -74,11 +75,11 @@ function getOrderUrl(tableId: string) {
     return window.location.origin + window.location.pathname;
   }
   
-  const cleanTableId = encodeURIComponent(tableId.trim());
-  // Base segura: origin + pathname (ex: https://dominio.com/)
-  // Importante: HashRouter exige o # antes da rota
+  // UUIDs são seguros para URL, mas garantimos que não haja espaços
+  const cleanTableId = tableId.trim();
   const origin = window.location.origin;
   const pathname = window.location.pathname;
+  // Suporte para deploy em subdiretórios (ex: OneDrive ou GitHub Pages)
   const base = pathname.endsWith('/') ? pathname : pathname + '/';
   
   return `${origin}${base}#/cardapio/${cleanTableId}`;
@@ -209,6 +210,19 @@ export default function Tables() {
       supabase.removeChannel(tablesSubscription);
       supabase.removeChannel(ordersSubscription);
     };
+  }, []);
+
+  // Limpeza automática de mesas estagnadas
+  useEffect(() => {
+    // Executa uma vez ao montar o componente
+    cleanupStaleTables().catch(err => console.error('Erro na limpeza inicial:', err));
+
+    // Configura o intervalo para cada 60 segundos
+    const interval = setInterval(() => {
+      cleanupStaleTables().catch(err => console.error('Erro na limpeza periódica:', err));
+    }, 60000);
+
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {

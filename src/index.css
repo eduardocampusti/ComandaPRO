@@ -16,6 +16,12 @@
   --color-on-primary-fixed: #410004;
   --color-on-primary-fixed-variant: #930013;
   
+  /* Numeric scales for backward compatibility */
+  --color-primary-600: var(--color-primary);
+  --color-primary-500: var(--color-primary-container);
+  --color-primary-300: var(--color-primary-fixed-dim);
+  --color-primary-100: var(--color-primary-fixed);
+  
   --color-secondary: #475569; /* Slate 600 */
   --color-on-secondary: #ffffff;
   --color-secondary-container: #f1f5f9; /* Slate 100 */

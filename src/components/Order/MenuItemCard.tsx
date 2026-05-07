@@ -14,7 +14,11 @@ interface MenuItemCardProps {
   onToggleAvailability: (id: string, current: boolean) => void;
 }
 
-const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
+const formatCurrency = (value: any) => {
+  const num = typeof value === 'number' ? value : Number(value || 0);
+  if (isNaN(num)) return 'R$ 0,00';
+  return `R$ ${num.toFixed(2).replace('.', ',')}`;
+};
 
 export const MenuItemCard: React.FC<MenuItemCardProps> = ({
   item,
