@@ -86,9 +86,11 @@ export interface CartItem {
 export interface OrderData {
   id: string;
   table_id: string;
+  table_number?: string | number;
   items: CartItem[];
   status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'served' | 'paid' | 'archived' | 'cancelled';
   total_amount: number;
+  payment_method?: 'pix' | 'card' | 'cash' | 'pending';
   created_at?: string;
 }
 
@@ -128,6 +130,15 @@ export interface PublicMenuResponse {
 export interface PublicOrderOptions {
   customerName?: string;
   notes?: string;
+}
+
+export interface ActivityLogData {
+  id: string;
+  restaurant_id: string;
+  user_id?: string;
+  action: string;
+  details: any;
+  created_at: string;
 }
 
 // ========== Realtime helpers ==========
@@ -348,7 +359,7 @@ export async function fetchAllActiveReservations(): Promise<ReservationData[]> {
 // ========== Orders ==========
 
 export async function fetchOrders(filters?: { status?: string[]; tableId?: string; startDate?: string }): Promise<OrderData[]> {
-  let query = supabase.from('orders').select('*');
+  let query = supabase.from('orders').select('*, tables(number)');
 
   if (filters?.status && filters.status.length > 0) {
     query = query.in('status', filters.status);
@@ -388,6 +399,14 @@ export async function createOrder(tableId: string, items: CartItem[]): Promise<O
 
 export async function updateOrder(id: string, updates: Partial<OrderData>): Promise<void> {
   const { error } = await supabase.from('orders').update(toSnakeCase(updates)).eq('id', id);
+  if (error) throw error;
+}
+
+export async function updateOrderPaymentMethod(orderId: string, method: 'pix' | 'card' | 'cash'): Promise<void> {
+  const { error } = await supabase
+    .from('orders')
+    .update({ payment_method: method })
+    .eq('id', orderId);
   if (error) throw error;
 }
 
@@ -535,6 +554,13 @@ export async function addSession(tableId: string): Promise<SessionData> {
   return normalizeSession(data);
 }
 
+// ========== Activity Logs ==========
+
+export async function logActivity(action: string, details: any = {}): Promise<void> {
+  const { error } = await supabase.from('activity_logs').insert({ action, details });
+  if (error) throw error;
+}
+
 // ========== Settings ==========
 
 export async function fetchSettings(): Promise<AppSettings | null> {
@@ -653,6 +679,7 @@ function normalizeOrder(raw: any): OrderData {
   return {
     id: raw.id || '',
     table_id: raw.table_id || '',
+    table_number: raw.table_number || raw.tableNumber || (raw.tables?.number),
     items: (Array.isArray(raw.items) ? raw.items : []).map((item: any) => {
       if (!item) return { menu_item_id: '', name: 'Item inválido', price: 0, quantity: 0 };
       return {
@@ -666,6 +693,7 @@ function normalizeOrder(raw: any): OrderData {
     }),
     status: raw.status || 'pending',
     total_amount: Number(raw.total_amount ?? raw.totalAmount ?? 0),
+    payment_method: raw.payment_method || raw.paymentMethod,
     created_at: raw.created_at,
   };
 }

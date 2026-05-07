@@ -7,6 +7,7 @@ import PublicMenu from './pages/PublicMenu';
 import Orders from './pages/Orders';
 import Settings from './pages/Settings';
 import Cashier from './pages/Cashier';
+import Caixa from './pages/Caixa';
 import Reports from './pages/Reports';
 import MenuManagement from './pages/MenuManagement';
 import Login from './pages/Login';
@@ -70,7 +71,7 @@ export default function App() {
         >
           <Route path="/" element={<Dashboard />} />
           <Route path="/orders" element={<Orders />} />
-          <Route path="/cashier" element={<Cashier />} />
+          <Route path="/cashier" element={<Caixa />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/tables" element={<Tables />} />
           <Route path="/menu" element={<MenuManagement />} />

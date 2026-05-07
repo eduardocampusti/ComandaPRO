@@ -16,6 +16,7 @@ interface OrderData {
   items: CartItem[];
   status: string;
   total_amount: number;
+  payment_method?: string;
   created_at?: string;
 }
 
@@ -125,9 +126,83 @@ export default function Reports() {
         .slice(0, 5);
   };
 
+  // New Calculations
+  const totalPix = paidOrders.filter(o => o.payment_method === 'pix').reduce((s, o) => s + o.total_amount, 0);
+  const totalCard = paidOrders.filter(o => o.payment_method === 'card').reduce((s, o) => s + o.total_amount, 0);
+  const totalCash = paidOrders.filter(o => o.payment_method === 'cash').reduce((s, o) => s + o.total_amount, 0);
+  const countPix = paidOrders.filter(o => o.payment_method === 'pix').length;
+  const countCard = paidOrders.filter(o => o.payment_method === 'card').length;
+  const countCash = paidOrders.filter(o => o.payment_method === 'cash').length;
+
+  const revenueByPaymentMethod = [
+    { method: 'Pix', total: totalPix, count: countPix, icon: 'pix', color: '#10b981' },
+    { method: 'Cartão', total: totalCard, count: countCard, icon: 'credit_card', color: '#3b82f6' },
+    { method: 'Dinheiro', total: totalCash, count: countCash, icon: 'payments', color: '#f59e0b' },
+  ];
+
+  const getHourlyPeak = () => {
+    const today = new Date().toDateString();
+    const todayOrders = paidOrders.filter(o => o.created_at && new Date(o.created_at).toDateString() === today);
+    if (todayOrders.length === 0) return 'N/A';
+    
+    const hours: Record<number, number> = {};
+    todayOrders.forEach(o => {
+      const hour = new Date(o.created_at!).getHours();
+      hours[hour] = (hours[hour] || 0) + o.total_amount;
+    });
+    
+    let maxHour = -1;
+    let maxTotal = 0;
+    Object.entries(hours).forEach(([hour, total]) => {
+      if (total > maxTotal) {
+        maxTotal = total;
+        maxHour = parseInt(hour);
+      }
+    });
+    
+    return maxHour !== -1 ? `${maxHour}:00 - ${maxHour + 1}:00` : 'N/A';
+  };
+
+  const getWeekdayRevenue = () => {
+    const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const result = weekdays.map(day => ({ day, total: 0 }));
+    
+    paidOrders.forEach(o => {
+      if (o.created_at) {
+        const dayIndex = new Date(o.created_at).getDay();
+        result[dayIndex].total += o.total_amount;
+      }
+    });
+    return result;
+  };
+
+  const getHighestOrderValue = () => {
+    if (paidOrders.length === 0) return 0;
+    return Math.max(...paidOrders.map(o => o.total_amount));
+  };
+
+  const getTopSellingProductByRevenue = () => {
+    const revenueMap: Record<string, number> = {};
+    paidOrders.forEach(o => {
+      o.items.forEach(item => {
+        if (!revenueMap[item.name]) revenueMap[item.name] = 0;
+        revenueMap[item.name] += item.price * item.quantity;
+      });
+    });
+    
+    const sorted = Object.entries(revenueMap).sort((a, b) => b[1] - a[1]);
+    return sorted.length > 0 ? { name: sorted[0][0], total: sorted[0][1] } : { name: 'N/A', total: 0 };
+  };
+
   const revenueByDay = useMemo(() => getRevenueByDay(), [paidOrders]);
   const topItems = useMemo(() => getTopItems(), [validOrders]);
   const topTables = useMemo(() => getTopTables(), [validOrders]);
+  const hourlyPeak = useMemo(() => getHourlyPeak(), [paidOrders]);
+  const weekdayRevenue = useMemo(() => getWeekdayRevenue(), [paidOrders]);
+  const highestOrderValue = useMemo(() => getHighestOrderValue(), [paidOrders]);
+  const topProductByRevenue = useMemo(() => getTopSellingProductByRevenue(), [paidOrders]);
+  const cancellationRate = orders.length > 0 ? (orders.filter(o => o.status === 'cancelled').length / orders.length * 100) : 0;
+  
   const hasRevenueData = revenueByDay.some(day => day.total > 0);
   const topItemMaxQuantity = topItems[0]?.quantity || 0;
 
@@ -145,6 +220,13 @@ export default function Reports() {
       topItemMaxQuantity={topItemMaxQuantity}
       topTables={topTables}
       formatCurrency={formatCurrency}
+      revenueByPaymentMethod={revenueByPaymentMethod}
+      hourlyPeak={hourlyPeak}
+      cancellationRate={cancellationRate}
+      weekdayRevenue={weekdayRevenue}
+      highestOrderValue={highestOrderValue}
+      topProductByRevenue={topProductByRevenue}
+      paidOrders={paidOrders}
     />
   );
 }

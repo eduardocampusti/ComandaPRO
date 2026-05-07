@@ -732,6 +732,7 @@ export default function Order() {
       <OrderHistoryModal
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
+        history={orderHistory}
       />
 
       <AnimatePresence>

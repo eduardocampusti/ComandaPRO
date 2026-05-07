@@ -32,7 +32,6 @@ type ViewMode = 'kanban' | 'by-table' | 'summary';
 
 interface OrderData extends DatabaseOrderData {
   items: CartItem[];
-  tableNumber?: string | number;
 }
 
 interface KdsColumn {
@@ -62,7 +61,7 @@ const columns: KdsColumn[] = [
   {
     id: 'pending',
     title: 'Novos',
-    subtitle: 'Aguardando inicio',
+    subtitle: 'Aguardando início',
     actionLabel: 'Iniciar preparo',
     emptyLabel: 'Nenhum pedido novo',
     nextStatus: 'preparing',
@@ -113,22 +112,21 @@ function formatCurrency(value: number) {
 function getStatusLabel(status: OrderStatus) {
   switch (status) {
     case 'pending':
-      return 'Novo';
+      return 'Aguardando';
     case 'preparing':
-      return 'Em preparo';
+      return 'Em Preparo';
     case 'ready':
       return 'Pronto';
     case 'delivered':
-    case 'served':
       return 'Entregue';
     case 'paid':
       return 'Pago';
-    case 'archived':
-      return 'Arquivado';
     case 'cancelled':
       return 'Cancelado';
+    case 'archived':
+      return 'Arquivado';
     default:
-      return status;
+      return 'Desconhecido';
   }
 }
 
@@ -375,7 +373,8 @@ export default function Orders() {
 
     const compiledOrders = rawOrders.map((order) => ({
       ...order,
-      tableNumber: tablesMap.get(order.table_id) || 'N/A',
+      // Prioriza table_number que já vem normalizado do banco (via fetchOrders)
+      table_number: order.table_number || tablesMap.get(order.table_id),
     }));
 
     const currentPendingCount = compiledOrders.filter((order) => order.status === 'pending').length;
@@ -515,7 +514,7 @@ export default function Orders() {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Imprimir Comanda - Mesa ${order.tableNumber}</title>
+          <title>Imprimir Comanda - Mesa ${order.table_number || order.table_id?.slice(-4)}</title>
           <style>
             body { font-family: monospace; padding: 10px; max-width: 300px; margin: 0 auto; color: #000; }
             h1, h2 { text-align: center; margin: 5px 0; }
@@ -526,7 +525,7 @@ export default function Orders() {
           </style>
         </head>
         <body>
-          <h1>Mesa ${order.tableNumber}</h1>
+          <h1>Mesa ${order.table_number || order.table_id?.slice(-4)}</h1>
           <h2>Pedido</h2>
           <p style="text-align: center;">${dateString} as ${timeString}</p>
           <hr/>
@@ -551,7 +550,7 @@ export default function Orders() {
     return orders.filter((order) => {
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase();
-      const tableMatch = String(order.tableNumber).toLowerCase().includes(term);
+      const tableMatch = String(order.table_number || '').toLowerCase().includes(term);
       const itemMatch = order.items.some((item) =>
         item.name.toLowerCase().includes(term) ||
         (item.notes && item.notes.toLowerCase().includes(term))
@@ -619,20 +618,20 @@ export default function Orders() {
 
   const getActiveOrdersByTable = () => {
     const activeOrders = filteredOrders.filter((order) => kitchenStatuses.includes(order.status));
-    const grouped = new Map<string, { tableNumber: string | number; orders: OrderData[] }>();
+    const grouped = new Map<string, { table_number: string | number; orders: OrderData[] }>();
 
     activeOrders.forEach((order) => {
       if (!grouped.has(order.table_id)) {
-        grouped.set(order.table_id, { tableNumber: order.tableNumber || '?', orders: [] });
+        grouped.set(order.table_id, { table_number: order.table_number || '?', orders: [] });
       }
       grouped.get(order.table_id)!.orders.push(order);
     });
 
     return Array.from(grouped.values()).sort((a, b) => {
-      const numA = Number.parseInt(String(a.tableNumber), 10);
-      const numB = Number.parseInt(String(b.tableNumber), 10);
+      const numA = Number.parseInt(String(a.table_number), 10);
+      const numB = Number.parseInt(String(b.table_number), 10);
       if (!Number.isNaN(numA) && !Number.isNaN(numB)) return numA - numB;
-      return String(a.tableNumber).localeCompare(String(b.tableNumber));
+      return String(a.table_number).localeCompare(String(b.table_number));
     });
   };
 
@@ -681,7 +680,7 @@ export default function Orders() {
             <div className="min-w-0">
               <span className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 font-display text-xl font-black leading-none text-white dark:bg-white dark:text-slate-950">
                 <Utensils className="h-5 w-5" />
-                Mesa {order.tableNumber || '?'}
+                Mesa {order.table_number || order.table_id?.slice(-4) || '?'}
               </span>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className={cx('rounded-full px-2.5 py-1 text-xs font-black ring-1 ring-inset', column.badgeClassName)}>
@@ -1098,13 +1097,13 @@ export default function Orders() {
             ) : (
               groupedOrders.map((group) => (
                 <section
-                  key={group.tableNumber}
+                  key={group.table_number}
                   className="flex max-h-[82vh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-soft dark:border-slate-800 dark:bg-slate-900"
                 >
                   <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 p-4 dark:border-slate-800">
                     <h2 className="flex items-center gap-2 font-display text-2xl font-black text-slate-950 dark:text-white">
                       <Utensils className="h-5 w-5 text-primary-600 dark:text-primary-300" />
-                      Mesa {group.tableNumber}
+                      Mesa {group.table_number}
                     </h2>
                     <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-black text-primary-700 ring-1 ring-primary-200 dark:bg-primary-950/40 dark:text-primary-200 dark:ring-primary-900">
                       {group.orders.length} pedido(s)
